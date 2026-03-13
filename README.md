@@ -10,6 +10,7 @@
 ![Next.js](https://img.shields.io/badge/Next.js_15-000?style=flat-square&logo=next.js)
 ![NestJS](https://img.shields.io/badge/NestJS-E0234E?style=flat-square&logo=nestjs&logoColor=white)
 ![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=flat-square&logo=supabase&logoColor=white)
+![Brevo](https://img.shields.io/badge/Brevo-3B5998?style=flat-square&logo=brevo&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)
 ![Prisma](https://img.shields.io/badge/Prisma-2D3748?style=flat-square&logo=prisma&logoColor=white)
 
@@ -34,9 +35,9 @@
 
 **Frontend** — Next.js 15 · TypeScript · Zustand · @dnd-kit · Socket.io · Axios
 
-**Backend** — NestJS · Prisma ORM · JWT · Passport.js · Nodemailer · Socket.io
+**Backend** — NestJS · Prisma ORM · JWT · Passport.js · Brevo API · Socket.io
 
-**Infrastructure** — Supabase (PostgreSQL) · Railway (API) · Netlify (Frontend) · Resend (Email)
+**Infrastructure** — Supabase (PostgreSQL) · Railway (API) · Netlify (Frontend) · Brevo (Email)
 
 ---
 
@@ -62,11 +63,8 @@ npm run dev
 DATABASE_URL="postgresql://..."     # Supabase connection pooler URL (port 6543)
 JWT_SECRET="your-secret"
 SUPER_PASSWORD="your-admin-password"
-SMTP_HOST="smtp.resend.com"
-SMTP_PORT=465
-SMTP_USER="resend"
-SMTP_PASS="re_your_resend_api_key"
-MAIL_FROM="no-reply@yourdomain.com"
+BREVO_API_KEY="xkeysib-..."        # Brevo API Key
+MAIL_FROM="your-verified-email@gmail.com"
 ```
 
 **`frontend/.env.local`**
@@ -88,7 +86,7 @@ pulse/
 │   │   ├── realtime/       # WebSocket gateway
 │   │   ├── notifications/  # Email & in-app alerts
 │   │   ├── admin/          # Super user controls
-│   │   └── common/mail/    # Resend SMTP service
+│   │   └── common/mail/    # Brevo API service
 │   └── server/prisma/      # DB schema & migrations
 └── frontend/
     └── src/
@@ -122,7 +120,7 @@ POST /admin/super-verify      → Unlock admin mode
 | Frontend | **Netlify** | Auto-deploys from `master` |
 | Backend | **Railway** | Root dir: `backend`, start: `npm run start:prod` |
 | Database | **Supabase** | PostgreSQL, use Transaction Pooler URL |
-| Email | **Resend** | SMTP via `smtp.resend.com:465` |
+| Email | **Brevo** | Transactional API (no SMTP block) |
 
 ---
 
