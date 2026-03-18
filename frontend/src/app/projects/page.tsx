@@ -25,7 +25,7 @@ type SortOption = 'name' | 'date' | 'tickets' | 'recent';
 type ViewMode = 'grid' | 'list';
 
 export default function ProjectsPage() {
-  const { token, logout, email } = useAuth();
+  const { token, logout } = useAuth();
   const router = useRouter();
   const [items, setItems] = useState<Project[]>([]);
   const [name, setName] = useState("");
