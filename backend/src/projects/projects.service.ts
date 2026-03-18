@@ -9,6 +9,7 @@ export class ProjectsService {
     return this.prisma.project.findMany({
       where: { ownerId: userId },
       orderBy: { createdAt: 'desc' },
+      include: { tickets: true },
     });
   }
 

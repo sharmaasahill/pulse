@@ -166,8 +166,17 @@ export default function ProjectsPage() {
   // Analytics
   const stats = useMemo(() => {
     const totalTickets = items.reduce((s, p) => s + (p.tickets?.length || 0), 0);
+    const todo = items.reduce((s, p) => s + (p.tickets?.filter(t => t.status === "TODO").length || 0), 0);
+    const inProgress = items.reduce((s, p) => s + (p.tickets?.filter(t => t.status === "IN_PROGRESS").length || 0), 0);
     const completed = items.reduce((s, p) => s + (p.tickets?.filter(t => t.status === "DONE").length || 0), 0);
-    return { total: items.length, totalTickets, completed, progress: totalTickets > 0 ? Math.round((completed / totalTickets) * 100) : 0 };
+    return { 
+      total: items.length, 
+      todo,
+      inProgress,
+      totalTickets, 
+      completed, 
+      progress: totalTickets > 0 ? Math.round((completed / totalTickets) * 100) : 0 
+    };
   }, [items]);
 
   const chartData = useMemo(() =>
@@ -219,11 +228,7 @@ export default function ProjectsPage() {
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg-primary)" }}>
       {/* Header */}
-      <div style={{
-        padding: "32px 32px 0",
-        maxWidth: "1400px",
-        margin: "0 auto",
-      }}>
+      <div className="page-container">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "28px" }}>
           <div>
             <h1 style={{
@@ -247,12 +252,12 @@ export default function ProjectsPage() {
 
         {/* Stats row */}
         {items.length > 0 && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px", marginBottom: "28px" }}>
+          <div className="stats-grid">
             {[
-              { label: "Total Boards", value: stats.total, color: "var(--accent-primary)" },
               { label: "Total Tasks", value: stats.totalTickets, color: "#8b5cf6" },
-              { label: "Completed", value: stats.completed, color: "var(--success)" },
-              { label: "Progress", value: `${stats.progress}%`, color: "#f59e0b" },
+              { label: "To Do", value: stats.todo, color: "#94a3b8" },
+              { label: "In Progress", value: stats.inProgress, color: "#3b82f6" },
+              { label: "Done", value: stats.completed, color: "var(--success)" },
             ].map(s => (
               <div key={s.label} style={{
                 background: "var(--bg-secondary)", border: "1px solid var(--border-primary)",
@@ -341,7 +346,7 @@ export default function ProjectsPage() {
       </div>
 
       {/* Board Cards */}
-      <div style={{ padding: "0 32px 40px", maxWidth: "1400px", margin: "0 auto" }}>
+      <div className="page-container" style={{ paddingTop: 0, paddingBottom: "40px" }}>
         {items.length === 0 ? (
           <div style={{
             textAlign: "center", padding: "80px 40px",

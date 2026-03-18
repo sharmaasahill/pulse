@@ -3,16 +3,15 @@ import { useEffect, useState } from "react";
 import { api, setAuthToken } from "@/lib/api";
 import { getSocket, joinProject } from "@/lib/socket";
 import { useParams, useRouter } from "next/navigation";
-import { useUi } from "@/store/useUi";
 import { useAuth } from "@/store/useAuth";
 import { Notifications } from "./notifications";
 import {
   DndContext, DragEndEvent, DragOverlay, DragStartEvent,
-  PointerSensor, useSensor, useSensors, useDroppable,
+  PointerSensor, TouchSensor, useSensor, useSensors, useDroppable,
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Search, Plus, GripVertical, Edit2, Trash2, ArrowLeft, Shield } from "lucide-react";
+import { Search, Plus, GripVertical, Edit2, Trash2, ArrowLeft } from "lucide-react";
 
 interface Project { id: string; name: string; tickets?: Ticket[]; }
 interface Ticket {
@@ -22,8 +21,8 @@ interface Ticket {
 }
 
 /* ─── Draggable Ticket ─── */
-function DraggableTicket({ ticket, superOn, onEdit, onDelete }: {
-  ticket: Ticket; superOn: boolean;
+function DraggableTicket({ ticket, onEdit, onDelete }: {
+  ticket: Ticket;
   onEdit: (t: Ticket) => void; onDelete: (t: Ticket) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: ticket.id });
@@ -68,23 +67,13 @@ function DraggableTicket({ ticket, superOn, onEdit, onDelete }: {
           </p>
         )}
       </div>
-
-      {superOn && (
-        <div style={{
-          fontSize: "11px", color: "var(--text-tertiary)",
-          borderTop: "1px solid var(--border-secondary)",
-          paddingTop: "8px", marginTop: "10px",
-        }}>
-          Created by: {ticket.author?.email ?? "System"}
-        </div>
-      )}
     </div>
   );
 }
 
 /* ─── Droppable Column ─── */
-function DroppableColumn({ id, title, tickets, superOn, className, onEdit, onDelete }: {
-  id: string; title: string; tickets: Ticket[]; superOn: boolean;
+function DroppableColumn({ id, title, tickets, className, onEdit, onDelete }: {
+  id: string; title: string; tickets: Ticket[];
   className: string; onEdit: (t: Ticket) => void; onDelete: (t: Ticket) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id });
@@ -110,7 +99,7 @@ function DroppableColumn({ id, title, tickets, superOn, className, onEdit, onDel
       </div>
       <SortableContext items={tickets.map(t => t.id)} strategy={verticalListSortingStrategy}>
         {tickets.map(t => (
-          <DraggableTicket key={t.id} ticket={t} superOn={superOn} onEdit={onEdit} onDelete={onDelete} />
+          <DraggableTicket key={t.id} ticket={t} onEdit={onEdit} onDelete={onDelete} />
         ))}
       </SortableContext>
     </div>
@@ -122,7 +111,6 @@ export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { token, logout, user } = useAuth();
-  const { superOn, toggleSuper } = useUi();
   const projectId = params.id as string;
   const [project, setProject] = useState<Project | null>(null);
   const [title, setTitle] = useState("");
@@ -133,7 +121,10 @@ export default function ProjectDetailPage() {
   const [showDeleteModal, setShowDeleteModal] = useState<Ticket | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } })
+  );
 
   useEffect(() => {
     if (!token) { router.push("/"); return; }
@@ -213,8 +204,8 @@ export default function ProjectDetailPage() {
   return (
     <div style={{ minHeight: "calc(100vh - var(--navbar-height))" }}>
       {/* Board Header */}
-      <div style={{
-        padding: "24px 32px",
+      <div className="page-container" style={{
+        paddingTop: "24px", paddingBottom: "24px",
         borderBottom: "1px solid var(--border-primary)",
         background: "var(--bg-secondary)",
       }}>
@@ -233,20 +224,12 @@ export default function ProjectDetailPage() {
             </div>
           </div>
           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-            <button
-              onClick={() => { if (!superOn) { const pwd = prompt("Enter super-user password"); toggleSuper(pwd ?? undefined); } else toggleSuper(); }}
-              className={superOn ? "btn" : "btn-secondary"}
-              style={{ padding: "8px 14px", fontSize: "13px", gap: "6px" }}
-            >
-              <Shield size={14} />
-              {superOn ? "Super On" : "Super Mode"}
-            </button>
           </div>
         </div>
       </div>
 
       {/* Content */}
-      <div style={{ padding: "24px 32px" }}>
+      <div className="page-container" style={{ paddingTop: "24px", paddingBottom: "24px" }}>
         {/* Add Ticket + Search */}
         <div style={{
           marginBottom: "24px", background: "var(--bg-secondary)",
@@ -280,9 +263,9 @@ export default function ProjectDetailPage() {
         {/* Kanban Board */}
         <DndContext sensors={sensors} onDragStart={e => setActiveId(e.active.id as string)} onDragEnd={handleDragEnd}>
           <div className="grid grid-3">
-            <DroppableColumn id="TODO" title="To Do" tickets={filteredTickets(project.tickets ?? [], "TODO")} superOn={superOn} className="todo" onEdit={openEditModal} onDelete={t => setShowDeleteModal(t)} />
-            <DroppableColumn id="IN_PROGRESS" title="In Progress" tickets={filteredTickets(project.tickets ?? [], "IN_PROGRESS")} superOn={superOn} className="in-progress" onEdit={openEditModal} onDelete={t => setShowDeleteModal(t)} />
-            <DroppableColumn id="DONE" title="Done" tickets={filteredTickets(project.tickets ?? [], "DONE")} superOn={superOn} className="done" onEdit={openEditModal} onDelete={t => setShowDeleteModal(t)} />
+            <DroppableColumn id="TODO" title="To Do" tickets={filteredTickets(project.tickets ?? [], "TODO")} className="todo" onEdit={openEditModal} onDelete={t => setShowDeleteModal(t)} />
+            <DroppableColumn id="IN_PROGRESS" title="In Progress" tickets={filteredTickets(project.tickets ?? [], "IN_PROGRESS")} className="in-progress" onEdit={openEditModal} onDelete={t => setShowDeleteModal(t)} />
+            <DroppableColumn id="DONE" title="Done" tickets={filteredTickets(project.tickets ?? [], "DONE")} className="done" onEdit={openEditModal} onDelete={t => setShowDeleteModal(t)} />
           </div>
           <DragOverlay>
             {activeId ? (

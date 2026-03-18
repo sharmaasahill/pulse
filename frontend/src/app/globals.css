@@ -602,6 +602,10 @@ body {
   .container {
     padding: 0 20px;
   }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 /* ═══════════════════════════════════════════════════
@@ -640,6 +644,11 @@ body {
   .card {
     padding: 16px;
   }
+
+  .page-container {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
 }
 
 /* ═══════════════════════════════════════════════════
@@ -672,4 +681,25 @@ body {
     font-size: 11px;
     padding: 2px 8px;
   }
+
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   LAYOUT CLASSES
+   ═══════════════════════════════════════════════════ */
+.page-container {
+  padding: 32px 32px 0;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 28px;
 }
