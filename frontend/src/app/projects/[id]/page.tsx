@@ -470,20 +470,21 @@ export default function ProjectDetailPage() {
   if (!project) return <div style={{ padding: 24 }}>Loading...</div>;
 
   return (
-      <div style={{ background: '#0f0f0f', minHeight: '100vh', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', color: '#ffffff' }}>
+      <div style={{ background: 'transparent', minHeight: 'calc(100vh - 64px)', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', color: '#ffffff' }}>
       {/* Header */}
       <div className="header" style={{
-        background: '#1a1a1a',
-        borderBottom: '1px solid #2a2a2a',
-        padding: '20px 0'
+        background: 'transparent',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+        padding: '24px 0',
+        marginBottom: '24px'
       }}>
-        <div className="container">
+        <div className="container" style={{ padding: '0 32px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <h1 style={{ fontSize: '20px', fontWeight: '600', margin: 0, color: '#ffffff' }}>
+              <h1 style={{ fontSize: '24px', fontWeight: '700', margin: 0, color: '#ffffff', letterSpacing: '-0.5px' }}>
                 {project.name}
               </h1>
-              <p style={{ margin: '4px 0 0 0', color: '#9ca3af', fontSize: '14px' }}>
+              <p style={{ margin: '4px 0 0 0', color: 'rgba(255, 255, 255, 0.6)', fontSize: '14px', fontWeight: '500' }}>
                 {(project.tickets ?? []).length} tickets
               </p>
             </div>
@@ -496,32 +497,28 @@ export default function ProjectDetailPage() {
                   } else toggleSuper();
                 }}
                 style={{
-                  background: superOn ? '#ffffff' : '#1a1a1a',
-                  color: superOn ? '#0f0f0f' : '#9ca3af',
+                  background: superOn ? '#ffffff' : 'rgba(255, 255, 255, 0.1)',
+                  color: superOn ? '#0f0f0f' : '#ffffff',
                   border: 'none',
-                  padding: '8px 12px',
+                  padding: '8px 16px',
                   borderRadius: '6px',
-                  fontWeight: '500',
-                  fontSize: '14px',
-                  cursor: 'pointer'
+                  fontWeight: '600',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
                 }}
               >
-                {superOn ? 'Super: ON' : 'Super: OFF'}
-              </button>
-              <button 
-                onClick={() => router.push('/projects')}
-                style={{
-                  background: 'transparent',
-                  color: '#9ca3af',
-                  border: '1px solid #2a2a2a',
-                  padding: '8px 12px',
-                  borderRadius: '6px',
-                  fontWeight: '500',
-                  fontSize: '14px',
-                  cursor: 'pointer'
-                }}
-              >
-                ← Back
+                <span style={{ 
+                  width: '8px', 
+                  height: '8px', 
+                  borderRadius: '50%', 
+                  background: superOn ? '#10b981' : 'rgba(255, 255, 255, 0.3)',
+                  display: 'inline-block'
+                }} />
+                {superOn ? 'Super Mode' : 'Super Mode'}
               </button>
             </div>
           </div>

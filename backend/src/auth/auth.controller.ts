@@ -1,34 +1,43 @@
 import { Body, Controller, Post } from '@nestjs/common';
-import { IsEmail, IsString, Length } from 'class-validator';
+import { IsEmail, IsString, MinLength } from 'class-validator';
 import { AuthService } from './auth.service';
 
-class IssueDto {
-  @IsEmail()
-  email!: string;
-}
-
-class VerifyDto {
+class RegisterDto {
   @IsEmail()
   email!: string;
 
   @IsString()
-  @Length(6, 6)
-  code!: string;
+  @MinLength(3)
+  username!: string;
+
+  @IsString()
+  @MinLength(1)
+  fullName!: string;
+
+  @IsString()
+  @MinLength(6)
+  password!: string;
+}
+
+class LoginDto {
+  @IsEmail()
+  email!: string;
+
+  @IsString()
+  password!: string;
 }
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
-  @Post('issue-otp')
-  issue(@Body() dto: IssueDto) {
-    return this.auth.issueOtp(dto.email.toLowerCase());
+  @Post('register')
+  register(@Body() dto: RegisterDto) {
+    return this.auth.register(dto);
   }
 
-  @Post('verify-otp')
-  verify(@Body() dto: VerifyDto) {
-    return this.auth.verifyOtp(dto.email.toLowerCase(), dto.code);
+  @Post('login')
+  login(@Body() dto: LoginDto) {
+    return this.auth.login(dto);
   }
 }
-
-

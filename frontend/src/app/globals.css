@@ -1,26 +1,36 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0f0f0f;
-  --foreground: #ffffff;
-  --card: #1a1a1a;
-  --card-hover: #252525;
-  --border: #2a2a2a;
-  --border-hover: #3a3a3a;
-  --primary: #ffffff;
-  --primary-hover: #e5e5e5;
-  --success: #10b981;
-  --warning: #f59e0b;
-  --danger: #ef4444;
-  --muted: #9ca3af;
-  --accent: #6366f1;
-  --sidebar: #141414;
-  --sidebar-hover: #1f1f1f;
-  --text-primary: #ffffff;
-  --text-secondary: #d1d5db;
-  --text-muted: #9ca3af;
-  --shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.5);
+  --background: #f4f5f7;
+  --foreground: #172b4d;
+  --card: #ffffff;
+  --card-hover: #f4f5f7;
+  --border: #dfe1e6;
+  --border-hover: #c1c7d0;
+  --primary: #0052cc;
+  --primary-hover: #0065ff;
+  --success: #22a06b;
+  --warning: #f5cd47;
+  --danger: #ca3521;
+  --muted: #5e6c84;
+  --accent: #00b8d9;
+  
+  /* Board specific */
+  --sidebar: rgba(0, 0, 0, 0.4);
+  --sidebar-hover: rgba(255, 255, 255, 0.2);
+  --text-primary: #172b4d;
+  --text-secondary: #5e6c84;
+  --text-muted: #8993a4;
+  
+  /* Board Backgrounds */
+  --board-bg-purple: linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%);
+  --board-bg-blue: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%);
+  --board-bg-green: linear-gradient(135deg, #10B981 0%, #047857 100%);
+  --board-bg-orange: linear-gradient(135deg, #F59E0B 0%, #B45309 100%);
+  
+  --shadow-sm: 0 1px 1px rgba(9, 30, 66, 0.25), 0 0 1px rgba(9, 30, 66, 0.31);
+  --shadow: 0 4px 8px -2px rgba(9, 30, 66, 0.25), 0 0 1px rgba(9, 30, 66, 0.31);
+  --shadow-lg: 0 8px 16px -4px rgba(9, 30, 66, 0.25), 0 0 1px rgba(9, 30, 66, 0.31);
 }
 
 body {
@@ -205,78 +215,62 @@ html {
 
 /* Kanban column styles */
 .kanban-column {
-  background: var(--card);
+  background: var(--card-hover);
   border-radius: 12px;
-  padding: 20px;
+  padding: 12px;
   min-height: 500px;
-  border: 2px solid var(--border);
+  border: none;
+  box-shadow: var(--shadow-sm);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .kanban-column.todo {
-  border-color: var(--muted);
+  border-top: 4px solid var(--muted);
 }
 
 .kanban-column.in-progress {
-  border-color: var(--warning);
+  border-top: 4px solid var(--primary);
 }
 
 .kanban-column.done {
-  border-color: var(--success);
+  border-top: 4px solid var(--success);
 }
 
 .kanban-column:hover {
-  border-color: var(--border-hover);
-  background: var(--card-hover);
+  box-shadow: 0 4px 8px rgba(9, 30, 66, 0.25);
 }
 
 /* Ticket card styles */
 .ticket-card {
-  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-  border-radius: 12px;
-  padding: 20px;
-  margin-bottom: 16px;
-  border: 1px solid rgba(226, 232, 240, 0.8);
+  background: var(--card);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 8px;
+  border: 1px solid transparent;
   cursor: grab;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s ease;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
-}
-
-.ticket-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-  transform: scaleX(0);
-  transition: transform 0.3s ease;
-}
-
-.ticket-card:hover::before {
-  transform: scaleX(1);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-primary);
 }
 
 .ticket-card:hover {
-  border-color: rgba(102, 126, 234, 0.3);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
-  transform: translateY(-3px);
-  background: linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%);
+  border-color: var(--primary);
+  box-shadow: var(--shadow);
+  transform: translateY(-2px);
 }
 
 .ticket-card:active {
   cursor: grabbing;
-  transform: rotate(3deg) scale(1.05);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+  transform: rotate(3deg) scale(1.02);
+  box-shadow: var(--shadow-lg);
 }
 
 .ticket-card.dragging {
   opacity: 0.6;
   transform: rotate(5deg) scale(1.05);
-  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-lg);
   z-index: 1000;
 }
 
@@ -284,31 +278,28 @@ html {
 .status-badge {
   display: inline-flex;
   align-items: center;
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  border: 1px solid transparent;
+  border: none;
 }
 
 .status-todo {
-  background: rgba(107, 114, 128, 0.1);
-  color: var(--muted);
-  border-color: rgba(107, 114, 128, 0.2);
+  background: #dfe1e6;
+  color: #172b4d;
 }
 
 .status-in-progress {
-  background: rgba(245, 158, 11, 0.1);
-  color: var(--warning);
-  border-color: rgba(245, 158, 11, 0.2);
+  background: #deebff;
+  color: #0052cc;
 }
 
 .status-done {
-  background: rgba(16, 185, 129, 0.1);
-  color: var(--success);
-  border-color: rgba(16, 185, 129, 0.2);
+  background: #e3fcef;
+  color: #006644;
 }
 
 /* Header styles */

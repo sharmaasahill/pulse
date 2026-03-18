@@ -1,13 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { MailService } from '../common/mail/mail.service';
 import { AppGateway } from '../realtime/gateway';
 
 @Injectable()
 export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly mail: MailService,
     private readonly gateway: AppGateway,
   ) {}
 
@@ -20,7 +18,7 @@ export class NotificationsService {
       });
 
       if (members.length === 0) {
-        console.log(`No members found for project ${projectId} - skipping email notifications`);
+        console.log(`No members found for project ${projectId} - skipping notifications`);
         return;
       }
 
@@ -35,18 +33,14 @@ export class NotificationsService {
 
       console.log(`Offline members to notify: ${offlineMembers.length}`);
 
-      // Send email notifications to offline members
+      // We have removed the email subsystem, so we just log the offline members
       if (offlineMembers.length > 0) {
-        await Promise.all(
-          offlineMembers.map(member => 
-            this.sendOfflineNotification(member.user.email, message)
-          )
-        );
+        console.log(`Email notifications disabled. Would have notified: ${offlineMembers.map(m => m.user.email).join(', ')}`);
       } else {
-        console.log(`All members are online for project ${projectId} - no email notifications needed`);
+        console.log(`All members are online for project ${projectId} - no fallback needed`);
       }
     } catch (error) {
-      console.error('Failed to send notifications:', error);
+      console.error('Failed to parse notifications:', error);
     }
   }
 
@@ -64,15 +58,4 @@ export class NotificationsService {
     // and map socket IDs to user IDs
     return [];
   }
-
-  private async sendOfflineNotification(email: string, message: string): Promise<void> {
-    try {
-      // Create a proper email notification (not OTP)
-      await this.mail.sendNotification(email, message);
-      console.log(`Offline notification sent to ${email}`);
-    } catch (error) {
-      console.error(`Failed to send offline notification to ${email}:`, error);
-    }
-  }
 }
-

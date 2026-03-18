@@ -5,7 +5,6 @@ import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
-import { MailModule } from './common/mail/mail.module';
 import { ProjectsModule } from './projects/projects.module';
 import { TicketsModule } from './tickets/tickets.module';
 import { ActivitiesModule } from './activities/activities.module';
@@ -18,7 +17,6 @@ import { AdminModule } from './admin/admin.module';
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
     UsersModule,
-    MailModule,
     AuthModule,
     ProjectsModule,
     TicketsModule,

@@ -2,11 +2,17 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { api, setAuthToken } from '@/lib/api';
 
+type UserData = {
+  email: string;
+  username: string;
+  name: string;
+};
+
 type AuthState = {
   token?: string;
-  email?: string;
-  issueOtp: (email: string) => Promise<void>;
-  verifyOtp: (email: string, code: string) => Promise<void>;
+  user?: UserData;
+  login: (data: any) => Promise<void>;
+  register: (data: any) => Promise<void>;
   logout: () => void;
 };
 
@@ -14,26 +20,25 @@ export const useAuth = create<AuthState>()(
   persist(
     (set) => ({
       token: undefined,
-      email: undefined,
-      async issueOtp(email: string) {
-        await api.post('/auth/issue-otp', { email });
-        set({ email });
+      user: undefined,
+      async login(data) {
+        const response = await api.post('/auth/login', data);
+        setAuthToken(response.data.token);
+        set({ token: response.data.token, user: response.data.user });
       },
-      async verifyOtp(email: string, code: string) {
-        const { data } = await api.post('/auth/verify-otp', { email, code });
-        setAuthToken(data.token);
-        set({ token: data.token, email });
+      async register(data) {
+        const response = await api.post('/auth/register', data);
+        setAuthToken(response.data.token);
+        set({ token: response.data.token, user: response.data.user });
       },
       logout() {
         setAuthToken(undefined);
-        set({ token: undefined, email: undefined });
+        set({ token: undefined, user: undefined });
       },
     }),
     {
       name: 'auth-storage',
-      partialize: (state) => ({ token: state.token, email: state.email }),
+      partialize: (state) => ({ token: state.token, user: state.user }),
     }
   )
 );
-
-

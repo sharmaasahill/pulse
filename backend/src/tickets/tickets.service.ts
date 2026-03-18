@@ -25,7 +25,12 @@ export class TicketsService {
       const user = await this.prisma.user.upsert({
         where: { email: input.authorEmail },
         update: {},
-        create: { email: input.authorEmail, name: input.authorEmail.split('@')[0] }
+        create: { 
+          email: input.authorEmail, 
+          name: input.authorEmail.split('@')[0],
+          username: input.authorEmail.split('@')[0] + Math.random().toString(36).substring(7),
+          passwordHash: ''
+        }
       });
       authorId = user.id;
     } else if (!authorId) {
@@ -33,7 +38,7 @@ export class TicketsService {
       const defaultUser = await this.prisma.user.upsert({
         where: { email: 'system@pulse.local' },
         update: {},
-        create: { email: 'system@pulse.local', name: 'System' }
+        create: { email: 'system@pulse.local', name: 'System', username: 'system_user', passwordHash: '' }
       });
       authorId = defaultUser.id;
     }
@@ -61,7 +66,7 @@ export class TicketsService {
       const defaultUser = await this.prisma.user.upsert({
         where: { email: 'system@pulse.local' },
         update: {},
-        create: { email: 'system@pulse.local', name: 'System' }
+        create: { email: 'system@pulse.local', name: 'System', username: 'system_user', passwordHash: '' }
       });
       actorIdToUse = defaultUser.id;
     }

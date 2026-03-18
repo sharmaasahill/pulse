@@ -28,12 +28,14 @@ enum TicketPriority {
 }
 
 model User {
-  id          String   @id @default(cuid())
-  email       String   @unique
-  name        String?
-  isSuperUser Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(cuid())
+  email        String   @unique
+  username     String   @unique
+  passwordHash String
+  name         String?
+  isSuperUser  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   // Relations
   projects       Project[]    @relation("OwnerProjects")
@@ -111,15 +113,3 @@ model Activity {
   @@index([ticketId])
 }
 
-// OTP codes for passwordless login
-model OtpToken {
-  id         String    @id @default(cuid())
-  email      String
-  code       String
-  expiresAt  DateTime
-  consumedAt DateTime?
-  createdAt  DateTime  @default(now())
-
-  @@index([email])
-  @@index([expiresAt])
-}
