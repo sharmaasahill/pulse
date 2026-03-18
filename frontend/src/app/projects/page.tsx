@@ -131,6 +131,29 @@ export default function ProjectsPage() {
     }
   }
 
+  function toggleProjectSelection(projectId: string) {
+    setSelectedProjects(prev => 
+      prev.includes(projectId) 
+        ? prev.filter(id => id !== projectId)
+        : [...prev, projectId]
+    );
+  }
+
+  async function bulkDeleteProjects() {
+    if (selectedProjects.length === 0) return;
+    if (!window.confirm(`Are you sure you want to delete ${selectedProjects.length} projects?`)) return;
+    setLoading(true);
+    try {
+      await Promise.all(selectedProjects.map(id => api.delete(`/projects/${id}`)));
+      setItems(items.filter(p => !selectedProjects.includes(p.id)));
+      setSelectedProjects([]);
+    } catch (error) {
+      console.error('Failed to delete projects:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   // Generate mock activity feed based on projects
   const activityFeed = useMemo(() => {
     if (!items.length) return [];
