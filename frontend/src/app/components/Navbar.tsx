@@ -4,11 +4,13 @@ import { useAuth } from "@/store/useAuth";
 import { useTheme } from "@/store/useTheme";
 import { LoginModal } from "./LoginModal";
 import Link from "next/link";
-import { LayoutDashboard, LogOut, Sun, Moon, Zap } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { LayoutDashboard, LogOut, Sun, Moon } from "lucide-react";
 
 export function Navbar() {
   const { token, logout, user } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const pathname = usePathname();
   const [showLoginModal, setShowLoginModal] = useState(false);
 
   const initials = user?.name
@@ -48,17 +50,6 @@ export function Navbar() {
             alignItems: 'center',
             gap: '10px',
           }}>
-            <div style={{
-              width: '28px',
-              height: '28px',
-              borderRadius: '8px',
-              background: 'var(--accent-gradient)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}>
-              <Zap size={16} color="white" fill="white" />
-            </div>
             <span style={{
               fontSize: '18px',
               fontWeight: '800',
@@ -88,9 +79,9 @@ export function Navbar() {
             {token ? (
               <>
                 <Link
-                  href="/projects"
+                  href={pathname === '/' ? '/projects' : '/'}
                   className="btn-icon"
-                  title="Dashboard"
+                  title={pathname === '/' ? 'Dashboard' : 'Home'}
                   style={{
                     width: '36px',
                     height: '36px',

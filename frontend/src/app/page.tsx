@@ -6,7 +6,7 @@ import { Navbar } from "./components/Navbar";
 import { LoginModal } from "./components/LoginModal";
 import { useRouter } from "next/navigation";
 import {
-  Zap, ArrowRight, LayoutDashboard, Users, Shield, BarChart3,
+  ArrowRight, LayoutDashboard, Users, Shield, BarChart3,
   Columns3, GripVertical, CheckCircle2, Moon, Sun,
 } from "lucide-react";
 
@@ -35,10 +35,11 @@ export default function LandingPage() {
   const router = useRouter();
   const [showLogin, setShowLogin] = useState(false);
 
-  // Auto-redirect authenticated users to dashboard
+  /* // Auto-redirect disabled as per user request to allow viewing landing page while logged in
   useEffect(() => {
     if (token) router.push("/projects");
   }, [token, router]);
+  */
 
   const hero = useInView();
   const features = useInView();
@@ -88,19 +89,6 @@ export default function LandingPage() {
           transform: hero.visible ? 'translateY(0)' : 'translateY(40px)',
           transition: 'all 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
         }}>
-          {/* Badge */}
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: '8px',
-            padding: '6px 16px', borderRadius: 'var(--radius-full)',
-            background: 'var(--accent-primary-soft)',
-            border: '1px solid var(--accent-primary-medium)',
-            color: 'var(--accent-primary)',
-            fontSize: '13px', fontWeight: '600', marginBottom: '28px',
-          }}>
-            <Zap size={14} fill="currentColor" />
-            Now in Version 2.0
-          </div>
-
           <h1 style={{
             fontSize: 'clamp(36px, 6vw, 64px)',
             fontWeight: '900',
@@ -131,14 +119,25 @@ export default function LandingPage() {
           </p>
 
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button
-              onClick={() => setShowLogin(true)}
-              className="btn"
-              style={{ padding: '14px 28px', fontSize: '15px' }}
-            >
-              Get Started Free
-              <ArrowRight size={18} />
-            </button>
+            {token ? (
+              <button
+                onClick={() => router.push('/projects')}
+                className="btn"
+                style={{ padding: '14px 28px', fontSize: '15px' }}
+              >
+                Go to Projects
+                <ArrowRight size={18} />
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowLogin(true)}
+                className="btn"
+                style={{ padding: '14px 28px', fontSize: '15px' }}
+              >
+                Get Started Free
+                <ArrowRight size={18} />
+              </button>
+            )}
             <a
               href="#features"
               className="btn-secondary"
@@ -392,7 +391,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ════════════ TESTIMONIALS ════════════ */}
+      {/* ════════════ BUILT WITH ════════════ */}
       <section
         ref={testimonials.ref}
         style={{ padding: '100px 24px', maxWidth: '1100px', margin: '0 auto' }}
@@ -407,64 +406,58 @@ export default function LandingPage() {
             fontSize: 'clamp(28px, 4vw, 40px)',
             fontWeight: '800', letterSpacing: '-0.02em', marginBottom: '16px',
           }}>
-            Loved by developers
+            Built with modern tech
           </h2>
           <p style={{ fontSize: '17px', color: 'var(--text-secondary)' }}>
-            Here&apos;s what people are saying about Pulse.
+            Pulse is powered by a robust, production-ready stack.
           </p>
         </div>
 
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-          gap: '20px',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: '16px',
         }}>
           {[
-            { name: 'Aarav K.', role: 'Full Stack Developer', text: 'Pulse replaced three tools for my team. The real-time sync alone saves us hours every week.', avatar: '🚀' },
-            { name: 'Priya M.', role: 'Project Manager', text: 'The Kanban board is incredibly smooth. Dark mode is beautiful, and the analytics help me report progress instantly.', avatar: '✨' },
-            { name: 'Rishi S.', role: 'Startup Founder', text: 'We moved our entire sprint planning to Pulse. Clean, fast, and exactly what we needed.', avatar: '⚡' },
-          ].map((t, i) => (
+            { name: 'Next.js', desc: 'React framework for the frontend with server-side rendering and static generation.', color: '#000' },
+            { name: 'NestJS', desc: 'Scalable Node.js backend with modular architecture and dependency injection.', color: '#e0234e' },
+            { name: 'TypeScript', desc: 'End-to-end type safety for a reliable developer experience and fewer bugs.', color: '#3178C6' },
+            { name: 'Prisma', desc: 'Type-safe ORM for database access with auto-generated migrations.', color: '#2D3748' },
+            { name: 'PostgreSQL', desc: 'Reliable relational database for storing projects, tickets, and users.', color: '#336791' },
+            { name: 'Socket.io', desc: 'Real-time bidirectional communication for live board updates.', color: '#010101' },
+            { name: 'Zustand', desc: 'Lightweight state management for theme, auth, and UI state.', color: '#443e38' },
+            { name: 'dnd-kit', desc: 'Modern and accessible drag-and-drop toolkit for fluid Kanban interactions.', color: '#333333' },
+          ].map((tech, i) => (
             <div
-              key={t.name}
+              key={tech.name}
               style={{
                 background: 'var(--bg-secondary)',
                 border: '1px solid var(--border-primary)',
                 borderRadius: 'var(--radius-lg)',
-                padding: '28px',
+                padding: '24px',
                 opacity: testimonials.visible ? 1 : 0,
                 transform: testimonials.visible ? 'translateY(0)' : 'translateY(20px)',
                 transition: 'all 0.6s ease-out',
-                transitionDelay: `${i * 0.1}s`,
+                transitionDelay: `${i * 0.08}s`,
               }}
             >
-              <p style={{
-                fontSize: '15px', color: 'var(--text-secondary)',
-                lineHeight: '1.7', marginBottom: '20px', fontStyle: 'italic',
+              <div style={{
+                fontSize: '18px', fontWeight: '800', marginBottom: '8px',
+                color: 'var(--text-primary)',
               }}>
-                &ldquo;{t.text}&rdquo;
-              </p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{
-                  width: '40px', height: '40px', borderRadius: '50%',
-                  background: 'var(--accent-primary-soft)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '18px',
-                }}>
-                  {t.avatar}
-                </div>
-                <div>
-                  <div style={{ fontSize: '14px', fontWeight: '700', color: 'var(--text-primary)' }}>
-                    {t.name}
-                  </div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
-                    {t.role}
-                  </div>
-                </div>
+                {tech.name}
               </div>
+              <p style={{
+                fontSize: '13px', color: 'var(--text-secondary)',
+                lineHeight: '1.65', margin: 0,
+              }}>
+                {tech.desc}
+              </p>
             </div>
           ))}
         </div>
       </section>
+
 
       {/* ════════════ CTA ════════════ */}
       <section style={{
@@ -491,11 +484,11 @@ export default function LandingPage() {
             Join Pulse for free and start organizing your projects today. No credit card needed.
           </p>
           <button
-            onClick={() => setShowLogin(true)}
+            onClick={() => token ? router.push('/projects') : setShowLogin(true)}
             className="btn"
             style={{ padding: '16px 32px', fontSize: '16px' }}
           >
-            Get Started Free
+            {token ? 'Go to Projects' : 'Get Started Free'}
             <ArrowRight size={20} />
           </button>
         </div>
@@ -508,13 +501,6 @@ export default function LandingPage() {
         textAlign: 'center',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '12px' }}>
-          <div style={{
-            width: '24px', height: '24px', borderRadius: '6px',
-            background: 'var(--accent-gradient)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <Zap size={13} color="white" fill="white" />
-          </div>
           <span style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)' }}>Pulse</span>
         </div>
         <p style={{ color: 'var(--text-tertiary)', fontSize: '13px' }}>

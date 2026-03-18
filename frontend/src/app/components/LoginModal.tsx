@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useAuth } from "@/store/useAuth";
 import { useRouter } from "next/navigation";
-import { X, Eye, EyeOff, ArrowRight, Zap } from "lucide-react";
+import { X, Eye, EyeOff, ArrowRight } from "lucide-react";
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -47,7 +47,7 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
           setLoading(false);
           return;
         }
-        await register({ email, password, username, name });
+        await register({ email, password, username, fullName: name });
       } else {
         await login({ email, password });
       }
@@ -99,7 +99,6 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
             <X size={16} />
           </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-            <Zap size={22} color="white" fill="white" />
             <span style={{ fontSize: '20px', fontWeight: '800', color: 'white' }}>Pulse</span>
           </div>
           <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: '14px', margin: 0 }}>
