@@ -1,205 +1,199 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useAuth } from "@/store/useAuth";
+import { useTheme } from "@/store/useTheme";
 import { Navbar } from "./components/Navbar";
 import { LoginModal } from "./components/LoginModal";
-import { useAuth } from "@/store/useAuth";
 import { useRouter } from "next/navigation";
+import {
+  Zap, ArrowRight, LayoutDashboard, Users, Shield, BarChart3,
+  Columns3, GripVertical, CheckCircle2, Moon, Sun,
+} from "lucide-react";
 
-export default function Home() {
+/* ─── Intersection Observer hook for scroll animations ─── */
+function useInView(threshold = 0.15) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setVisible(true); obs.unobserve(el); } },
+      { threshold }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [threshold]);
+
+  return { ref, visible };
+}
+
+export default function LandingPage() {
   const { token } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const router = useRouter();
-  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
 
-  function handleGetStarted(e: React.MouseEvent) {
-    e.preventDefault();
-    if (token) {
-      router.push("/projects");
-    } else {
-      setShowLoginModal(true);
-    }
-  }
+  // Auto-redirect authenticated users to dashboard
+  useEffect(() => {
+    if (token) router.push("/projects");
+  }, [token, router]);
+
+  const hero = useInView();
+  const features = useInView();
+  const howItWorks = useInView();
+  const testimonials = useInView();
 
   return (
-    <div style={{ 
-      minHeight: '100vh',
-      background: 'var(--background)',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      color: 'var(--foreground)'
-    }}>
+    <div style={{ background: 'var(--bg-primary)', color: 'var(--text-primary)', minHeight: '100vh' }}>
       <Navbar />
-      <LoginModal 
-        isOpen={showLoginModal} 
-        onClose={() => setShowLoginModal(false)}
-        onSuccess={() => setShowLoginModal(false)}
-      />
 
-      {/* Hero Section */}
-      <section style={{
-        paddingTop: '140px',
-        paddingBottom: '120px',
-        background: 'linear-gradient(135deg, rgba(0, 82, 204, 0.08) 0%, rgba(118, 56, 250, 0.08) 100%)',
-        position: 'relative',
-        overflow: 'hidden'
-      }}>
-        {/* Decorative background elements */}
-        <div style={{
-          position: 'absolute', top: '-10%', right: '-5%', width: '400px', height: '400px',
-          background: 'linear-gradient(135deg, #0052cc 0%, #7638fa 100%)',
-          filter: 'blur(100px)', opacity: '0.15', borderRadius: '50%', zIndex: 0
-        }} />
-        <div style={{
-          position: 'absolute', bottom: '-10%', left: '-5%', width: '400px', height: '400px',
-          background: 'linear-gradient(135deg, #00b8d9 0%, #0052cc 100%)',
-          filter: 'blur(100px)', opacity: '0.15', borderRadius: '50%', zIndex: 0
-        }} />
-
-        <div style={{
-          maxWidth: '1200px',
-          margin: '0 auto',
-          paddingLeft: '24px',
-          paddingRight: '24px',
+      {/* ════════════ HERO ════════════ */}
+      <section
+        ref={hero.ref}
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           position: 'relative',
-          zIndex: 1
-        }}>
+          overflow: 'hidden',
+          paddingTop: 'var(--navbar-height)',
+        }}
+      >
+        {/* Gradient orbs background */}
+        <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', zIndex: 0 }}>
           <div style={{
-            textAlign: 'center',
-            maxWidth: '800px',
-            margin: '0 auto',
-            marginBottom: '60px'
+            position: 'absolute', width: '600px', height: '600px', borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(99,102,241,0.15) 0%, transparent 70%)',
+            top: '-100px', right: '-100px', animation: 'float 8s ease-in-out infinite',
+          }} />
+          <div style={{
+            position: 'absolute', width: '500px', height: '500px', borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(139,92,246,0.12) 0%, transparent 70%)',
+            bottom: '-80px', left: '-80px', animation: 'float 10s ease-in-out infinite reverse',
+          }} />
+          <div style={{
+            position: 'absolute', width: '300px', height: '300px', borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(236,72,153,0.08) 0%, transparent 70%)',
+            top: '40%', left: '50%', animation: 'float 12s ease-in-out infinite',
+          }} />
+        </div>
+
+        <div style={{
+          position: 'relative', zIndex: 1, textAlign: 'center',
+          maxWidth: '800px', margin: '0 auto', padding: '0 24px',
+          opacity: hero.visible ? 1 : 0,
+          transform: hero.visible ? 'translateY(0)' : 'translateY(40px)',
+          transition: 'all 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
+        }}>
+          {/* Badge */}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: '8px',
+            padding: '6px 16px', borderRadius: 'var(--radius-full)',
+            background: 'var(--accent-primary-soft)',
+            border: '1px solid var(--accent-primary-medium)',
+            color: 'var(--accent-primary)',
+            fontSize: '13px', fontWeight: '600', marginBottom: '28px',
           }}>
-            <h1 style={{
-              fontSize: 'clamp(48px, 8vw, 76px)',
-              fontWeight: '800',
-              lineHeight: '1.1',
-              marginBottom: '24px',
-              color: 'var(--foreground)',
-              letterSpacing: '-0.03em'
-            }}>
-              Pulse keeps everything in the same place.
-            </h1>
-            <p style={{
-              fontSize: 'clamp(18px, 2.5vw, 22px)',
-              color: 'var(--muted)',
-              lineHeight: '1.6',
-              marginBottom: '40px',
-              maxWidth: '660px',
-              marginLeft: 'auto',
-              marginRight: 'auto',
-              fontWeight: '400'
-            }}>
-              Simple, flexible, and powerful. All it takes are boards, lists, and cards to get a clear view of who&apos;s doing what and what needs to get done.
-            </p>
-            <div style={{
-              display: 'flex',
-              gap: '16px',
-              justifyContent: 'center',
-              flexWrap: 'wrap'
-            }}>
-              <button
-                onClick={handleGetStarted}
-                style={{
-                  padding: '16px 40px',
-                  borderRadius: '12px',
-                  background: 'var(--primary)',
-                  color: '#ffffff',
-                  border: 'none',
-                  fontSize: '18px',
-                  fontWeight: '600',
-                  boxShadow: '0 8px 20px rgba(0, 82, 204, 0.3)',
-                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                  cursor: 'pointer'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                  e.currentTarget.style.boxShadow = '0 12px 28px rgba(0, 82, 204, 0.4)';
-                  e.currentTarget.style.filter = 'brightness(1.1)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 8px 20px rgba(0, 82, 204, 0.3)';
-                  e.currentTarget.style.filter = 'brightness(1)';
-                }}
-              >
-                Sign up - it&apos;s free!
-              </button>
-            </div>
+            <Zap size={14} fill="currentColor" />
+            Now in Version 2.0
           </div>
 
-          {/* Hero Image/Preview */}
-          <div style={{
-            borderRadius: '24px',
-            background: 'var(--card)',
-            border: '1px solid var(--border)',
-            padding: '24px',
-            boxShadow: 'var(--shadow)',
-            maxWidth: '1000px',
-            margin: '0 auto',
-            transform: 'perspective(1000px) rotateX(2deg) scale(0.98)',
-            transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'perspective(1000px) rotateX(0deg) scale(1) translateY(-10px)';
-            e.currentTarget.style.boxShadow = '0 30px 60px rgba(0, 0, 0, 0.12)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'perspective(1000px) rotateX(2deg) scale(0.98)';
-            e.currentTarget.style.boxShadow = 'var(--shadow)';
-          }}
-          >
-            <div style={{
-              background: 'var(--background)',
-              borderRadius: '16px',
-              padding: '24px',
-              border: '1px solid var(--border)',
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: '20px'
+          <h1 style={{
+            fontSize: 'clamp(36px, 6vw, 64px)',
+            fontWeight: '900',
+            lineHeight: '1.08',
+            letterSpacing: '-0.03em',
+            margin: '0 0 20px 0',
+          }}>
+            Ship projects{' '}
+            <span style={{
+              background: 'var(--accent-gradient)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
             }}>
-              {[
-                { title: 'To Do', color: '#e2e8f0', tickets: ['Plan app architecture', 'Design landing page'] },
-                { title: 'Doing', color: '#bfdbfe', tickets: ['Implement user auth'] },
-                { title: 'Done', color: '#bbf7d0', tickets: ['Setup repository', 'Configure database'] }
-              ].map((column, idx) => (
-                <div key={column.title} style={{
-                  background: 'var(--card-hover)',
-                  borderRadius: '12px',
-                  padding: '16px',
-                  border: '1px solid var(--border)',
-                  boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'
+              faster
+            </span>
+            <br />with your team
+          </h1>
+
+          <p style={{
+            fontSize: '18px',
+            color: 'var(--text-secondary)',
+            maxWidth: '540px',
+            margin: '0 auto 36px',
+            lineHeight: '1.7',
+          }}>
+            Pulse is a real-time Kanban board for modern teams. Organize tasks, track progress, and collaborate — all in one beautiful workspace.
+          </p>
+
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setShowLogin(true)}
+              className="btn"
+              style={{ padding: '14px 28px', fontSize: '15px' }}
+            >
+              Get Started Free
+              <ArrowRight size={18} />
+            </button>
+            <a
+              href="#features"
+              className="btn-secondary"
+              style={{
+                padding: '14px 28px', fontSize: '15px', textDecoration: 'none',
+                display: 'inline-flex', alignItems: 'center', gap: '8px',
+                borderRadius: 'var(--radius-md)', fontWeight: '600',
+                background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)',
+                color: 'var(--text-primary)', cursor: 'pointer',
+              }}
+            >
+              See Features
+            </a>
+          </div>
+
+          {/* Mini dashboard preview */}
+          <div style={{
+            marginTop: '60px',
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border-primary)',
+            borderRadius: 'var(--radius-xl)',
+            padding: '4px',
+            boxShadow: 'var(--shadow-xl)',
+            overflow: 'hidden',
+          }}>
+            <div style={{
+              display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px',
+              padding: '20px',
+              background: 'var(--bg-tertiary)',
+              borderRadius: 'var(--radius-lg)',
+            }}>
+              {['To Do', 'In Progress', 'Done'].map((col, i) => (
+                <div key={col} style={{
+                  background: 'var(--bg-secondary)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '14px',
+                  borderTop: `3px solid ${i === 0 ? 'var(--text-tertiary)' : i === 1 ? 'var(--accent-primary)' : 'var(--success)'}`,
                 }}>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: '16px'
-                  }}>
-                    <h3 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--foreground)', margin: 0 }}>
-                      {column.title}
-                    </h3>
-                    <span style={{
-                      background: column.color,
-                      color: 'var(--foreground)',
-                      fontSize: '12px',
-                      padding: '2px 8px',
-                      borderRadius: '12px',
-                      fontWeight: '600'
-                    }}>
-                      {column.tickets.length}
-                    </span>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-tertiary)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    {col}
                   </div>
-                  {column.tickets.map((ticket, i) => (
-                    <div key={i} style={{
-                      background: 'var(--card)',
-                      borderRadius: '8px',
-                      padding: '16px',
-                      marginBottom: '10px',
-                      border: '1px solid var(--border)',
-                      fontSize: '14px',
-                      color: 'var(--foreground)',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                      fontWeight: '500'
+                  {[0, 1].map(j => (
+                    <div key={j} style={{
+                      background: 'var(--bg-tertiary)',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '10px 12px',
+                      marginBottom: '6px',
+                      fontSize: '13px',
+                      fontWeight: '500',
+                      color: 'var(--text-secondary)',
                     }}>
-                      {ticket}
+                      <div style={{
+                        width: `${50 + j * 30}%`, height: '8px',
+                        background: 'var(--border-primary)', borderRadius: '4px',
+                      }} />
                     </div>
                   ))}
                 </div>
@@ -209,250 +203,330 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Features Section */}
-      <section style={{
-        paddingTop: '120px',
-        paddingBottom: '120px',
-        background: 'var(--background)',
-        maxWidth: '1200px',
-        margin: '0 auto',
-        paddingLeft: '24px',
-        paddingRight: '24px'
-      }}>
-        <div style={{ textAlign: 'center', marginBottom: '80px' }}>
+      {/* ════════════ FEATURES ════════════ */}
+      <section
+        id="features"
+        ref={features.ref}
+        style={{
+          padding: '120px 24px',
+          maxWidth: '1100px',
+          margin: '0 auto',
+        }}
+      >
+        <div style={{
+          textAlign: 'center', marginBottom: '64px',
+          opacity: features.visible ? 1 : 0,
+          transform: features.visible ? 'translateY(0)' : 'translateY(30px)',
+          transition: 'all 0.6s ease-out',
+        }}>
           <h2 style={{
-            fontSize: 'clamp(32px, 5vw, 48px)',
-            fontWeight: '800',
-            color: 'var(--foreground)',
-            marginBottom: '20px',
-            letterSpacing: '-0.02em'
+            fontSize: 'clamp(28px, 4vw, 40px)',
+            fontWeight: '800', letterSpacing: '-0.02em',
+            marginBottom: '16px',
           }}>
-            A productivity powerhouse
+            Everything you need to stay organized
           </h2>
           <p style={{
-            fontSize: '20px',
-            color: 'var(--muted)',
-            maxWidth: '700px',
-            margin: '0 auto',
-            lineHeight: '1.6'
+            fontSize: '17px', color: 'var(--text-secondary)',
+            maxWidth: '500px', margin: '0 auto',
           }}>
-            Simple, flexible, and powerful. All it takes are boards, lists, and cards to get a clear view of who&apos;s doing what and what needs to get done.
+            Powerful features designed to help your team focus on what matters most.
           </p>
         </div>
 
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-          gap: '32px'
+          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+          gap: '20px',
         }}>
           {[
             {
-              title: 'Boards',
-              description: 'Pulse boards keep tasks organized and work moving forward. In a glance, see everything from "things to do" to "aww yeah, we did it!"',
-              icon: '📋',
-              color: 'rgba(0, 82, 204, 0.1)'
+              icon: <Columns3 size={22} />,
+              title: 'Kanban Boards',
+              desc: 'Drag-and-drop cards across customizable columns. See your workflow at a glance.',
+              gradient: 'linear-gradient(135deg, #6366f1, #818cf8)',
             },
             {
-              title: 'Lists',
-              description: 'The different stages of a task. Start simple with To Do, Doing or Done—or build a workflow custom fit to your team\'s needs. There\'s no wrong way to Pulse.',
-              icon: '📝',
-              color: 'rgba(16, 185, 129, 0.1)'
-            },
-            {
-              title: 'Cards',
-              description: 'Cards represent tasks and ideas and hold all the information to get the job done. As you make progress, move cards across lists to show their status.',
-              icon: '🗂️',
-              color: 'rgba(118, 56, 250, 0.1)'
-            },
-            {
-              title: 'Secure Authentication',
-              description: 'Sign in effortlessly using your email, username, and password. Fully secured utilizing bcrypt password hashing. Stay protected without the friction.',
-              icon: '🔐',
-              color: 'rgba(245, 158, 11, 0.1)'
-            },
-            {
+              icon: <GripVertical size={22} />,
               title: 'Real-Time Sync',
-              description: 'Never refresh again. Changes made by your team appear instantly across all devices. Real-time collaboration made simple.',
-              icon: '⚡',
-              color: 'rgba(239, 68, 68, 0.1)'
+              desc: 'Changes appear instantly for everyone. No refresh needed — powered by WebSockets.',
+              gradient: 'linear-gradient(135deg, #8b5cf6, #a78bfa)',
             },
             {
-              title: 'Project Dashboard',
-              description: 'Manage multiple boards with a bird\'s eye view. Seamlessly navigate between different projects and team workspaces.',
-              icon: '📊',
-              color: 'rgba(6, 182, 212, 0.1)'
-            }
-          ].map((feature, idx) => (
+              icon: <Shield size={22} />,
+              title: 'Secure Authentication',
+              desc: 'Password-based sign up with bcrypt hashing. Your data stays safe and encrypted.',
+              gradient: 'linear-gradient(135deg, #ec4899, #f472b6)',
+            },
+            {
+              icon: <BarChart3 size={22} />,
+              title: 'Project Analytics',
+              desc: 'Track completion rates, task distribution, and team velocity with built-in charts.',
+              gradient: 'linear-gradient(135deg, #10b981, #34d399)',
+            },
+            {
+              icon: <Moon size={22} />,
+              title: 'Dark & Light Mode',
+              desc: 'Switch themes with one click. Your preference is saved and applied automatically.',
+              gradient: 'linear-gradient(135deg, #f59e0b, #fbbf24)',
+            },
+            {
+              icon: <Users size={22} />,
+              title: 'Team Workspace',
+              desc: 'Create multiple boards, star your favorites, and organize projects your way.',
+              gradient: 'linear-gradient(135deg, #06b6d4, #22d3ee)',
+            },
+          ].map((feature, i) => (
             <div
-              key={idx}
+              key={feature.title}
               style={{
-                background: 'var(--card)',
-                borderRadius: '16px',
-                padding: '40px 32px',
-                border: '1px solid var(--border)',
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                cursor: 'pointer',
-                boxShadow: 'var(--shadow)',
-                position: 'relative',
-                overflow: 'hidden'
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border-primary)',
+                borderRadius: 'var(--radius-lg)',
+                padding: '28px',
+                transition: 'all 0.3s ease',
+                cursor: 'default',
+                opacity: features.visible ? 1 : 0,
+                transform: features.visible ? 'translateY(0)' : 'translateY(20px)',
+                transitionDelay: `${i * 0.08}s`,
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-6px)';
-                e.currentTarget.style.boxShadow = '0 20px 40px rgba(0, 0, 0, 0.08)';
-                e.currentTarget.style.borderColor = 'var(--primary)';
+                e.currentTarget.style.transform = 'translateY(-4px)';
+                e.currentTarget.style.boxShadow = 'var(--shadow-lg)';
+                e.currentTarget.style.borderColor = 'var(--border-hover)';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = 'var(--shadow)';
-                e.currentTarget.style.borderColor = 'var(--border)';
+                e.currentTarget.style.boxShadow = 'none';
+                e.currentTarget.style.borderColor = 'var(--border-primary)';
               }}
             >
               <div style={{
-                width: '64px',
-                height: '64px',
-                borderRadius: '16px',
-                background: feature.color,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '32px',
-                marginBottom: '24px'
+                width: '44px', height: '44px', borderRadius: 'var(--radius-md)',
+                background: feature.gradient,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'white', marginBottom: '18px',
               }}>
                 {feature.icon}
               </div>
               <h3 style={{
-                fontSize: '22px',
-                fontWeight: '700',
-                color: 'var(--foreground)',
-                marginBottom: '16px'
+                fontSize: '17px', fontWeight: '700', marginBottom: '8px',
+                color: 'var(--text-primary)',
               }}>
                 {feature.title}
               </h3>
               <p style={{
-                fontSize: '16px',
-                color: 'var(--muted)',
-                lineHeight: '1.6',
-                margin: 0
+                fontSize: '14px', color: 'var(--text-secondary)',
+                lineHeight: '1.65', margin: 0,
               }}>
-                {feature.description}
+                {feature.desc}
               </p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section style={{
-        paddingTop: '100px',
-        paddingBottom: '120px',
-        background: 'linear-gradient(135deg, #0052cc 0%, #7638fa 100%)',
-        margin: '0 24px 60px 24px',
-        borderRadius: '32px',
-        position: 'relative',
-        overflow: 'hidden'
-      }}>
-        {/* Decorative elements */}
+      {/* ════════════ HOW IT WORKS ════════════ */}
+      <section
+        ref={howItWorks.ref}
+        style={{
+          padding: '100px 24px',
+          background: 'var(--bg-secondary)',
+          borderTop: '1px solid var(--border-primary)',
+          borderBottom: '1px solid var(--border-primary)',
+        }}
+      >
+        <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+          <div style={{
+            textAlign: 'center', marginBottom: '64px',
+            opacity: howItWorks.visible ? 1 : 0,
+            transform: howItWorks.visible ? 'translateY(0)' : 'translateY(30px)',
+            transition: 'all 0.6s ease-out',
+          }}>
+            <h2 style={{
+              fontSize: 'clamp(28px, 4vw, 40px)',
+              fontWeight: '800', letterSpacing: '-0.02em', marginBottom: '16px',
+            }}>
+              Get started in minutes
+            </h2>
+            <p style={{ fontSize: '17px', color: 'var(--text-secondary)', maxWidth: '460px', margin: '0 auto' }}>
+              Three simple steps to going from chaos to clarity.
+            </p>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '32px' }}>
+            {[
+              { num: '01', title: 'Create an account', desc: 'Sign up with your email and a secure password. Takes less than 30 seconds.' },
+              { num: '02', title: 'Set up your board', desc: 'Create a project, add tickets, and organize them across your columns.' },
+              { num: '03', title: 'Track & ship', desc: 'Drag tasks to completion. Monitor progress with built-in analytics.' },
+            ].map((step, i) => (
+              <div
+                key={step.num}
+                style={{
+                  textAlign: 'center', padding: '12px',
+                  opacity: howItWorks.visible ? 1 : 0,
+                  transform: howItWorks.visible ? 'translateY(0)' : 'translateY(20px)',
+                  transition: 'all 0.6s ease-out',
+                  transitionDelay: `${i * 0.15}s`,
+                }}
+              >
+                <div style={{
+                  fontSize: '48px', fontWeight: '900',
+                  background: 'var(--accent-gradient)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                  marginBottom: '16px', lineHeight: 1,
+                }}>
+                  {step.num}
+                </div>
+                <h3 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '10px' }}>
+                  {step.title}
+                </h3>
+                <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.65' }}>
+                  {step.desc}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ════════════ TESTIMONIALS ════════════ */}
+      <section
+        ref={testimonials.ref}
+        style={{ padding: '100px 24px', maxWidth: '1100px', margin: '0 auto' }}
+      >
         <div style={{
-          position: 'absolute', top: '-50%', left: '-10%', width: '100%', height: '100%',
-          background: 'radial-gradient(circle, rgba(255,255,255,0.2) 0%, transparent 60%)',
-          zIndex: 0
-        }} />
-        <div style={{
-          maxWidth: '800px',
-          margin: '0 auto',
-          textAlign: 'center',
-          position: 'relative',
-          zIndex: 1,
-          padding: '0 24px'
+          textAlign: 'center', marginBottom: '56px',
+          opacity: testimonials.visible ? 1 : 0,
+          transform: testimonials.visible ? 'translateY(0)' : 'translateY(30px)',
+          transition: 'all 0.6s ease-out',
         }}>
           <h2 style={{
-            fontSize: 'clamp(36px, 5vw, 56px)',
-            fontWeight: '800',
-            color: '#ffffff',
-            marginBottom: '24px',
-            letterSpacing: '-0.02em',
-            lineHeight: 1.1
+            fontSize: 'clamp(28px, 4vw, 40px)',
+            fontWeight: '800', letterSpacing: '-0.02em', marginBottom: '16px',
           }}>
-            Get started with Pulse today
+            Loved by developers
+          </h2>
+          <p style={{ fontSize: '17px', color: 'var(--text-secondary)' }}>
+            Here&apos;s what people are saying about Pulse.
+          </p>
+        </div>
+
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+          gap: '20px',
+        }}>
+          {[
+            { name: 'Aarav K.', role: 'Full Stack Developer', text: 'Pulse replaced three tools for my team. The real-time sync alone saves us hours every week.', avatar: '🚀' },
+            { name: 'Priya M.', role: 'Project Manager', text: 'The Kanban board is incredibly smooth. Dark mode is beautiful, and the analytics help me report progress instantly.', avatar: '✨' },
+            { name: 'Rishi S.', role: 'Startup Founder', text: 'We moved our entire sprint planning to Pulse. Clean, fast, and exactly what we needed.', avatar: '⚡' },
+          ].map((t, i) => (
+            <div
+              key={t.name}
+              style={{
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border-primary)',
+                borderRadius: 'var(--radius-lg)',
+                padding: '28px',
+                opacity: testimonials.visible ? 1 : 0,
+                transform: testimonials.visible ? 'translateY(0)' : 'translateY(20px)',
+                transition: 'all 0.6s ease-out',
+                transitionDelay: `${i * 0.1}s`,
+              }}
+            >
+              <p style={{
+                fontSize: '15px', color: 'var(--text-secondary)',
+                lineHeight: '1.7', marginBottom: '20px', fontStyle: 'italic',
+              }}>
+                &ldquo;{t.text}&rdquo;
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '40px', height: '40px', borderRadius: '50%',
+                  background: 'var(--accent-primary-soft)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '18px',
+                }}>
+                  {t.avatar}
+                </div>
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: '700', color: 'var(--text-primary)' }}>
+                    {t.name}
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                    {t.role}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ════════════ CTA ════════════ */}
+      <section style={{
+        padding: '100px 24px',
+        textAlign: 'center',
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'var(--accent-gradient)', opacity: 0.04,
+        }} />
+        <div style={{ position: 'relative', maxWidth: '600px', margin: '0 auto' }}>
+          <h2 style={{
+            fontSize: 'clamp(28px, 4vw, 40px)',
+            fontWeight: '800', letterSpacing: '-0.02em', marginBottom: '16px',
+          }}>
+            Ready to build something great?
           </h2>
           <p style={{
-            fontSize: '20px',
-            color: 'rgba(255, 255, 255, 0.9)',
-            marginBottom: '40px',
-            lineHeight: '1.6',
-            maxWidth: '600px',
-            marginLeft: 'auto',
-            marginRight: 'auto'
+            fontSize: '17px', color: 'var(--text-secondary)',
+            marginBottom: '32px', lineHeight: '1.7',
           }}>
-            Join the teams who trust us to manage their projects, organize their work, and improve productivity.
+            Join Pulse for free and start organizing your projects today. No credit card needed.
           </p>
           <button
-            onClick={handleGetStarted}
-            style={{
-              display: 'inline-block',
-              padding: '18px 48px',
-              borderRadius: '12px',
-              background: '#ffffff',
-              color: '#0052cc',
-              border: 'none',
-              fontSize: '18px',
-              fontWeight: '700',
-              boxShadow: '0 8px 24px rgba(0, 0, 0, 0.2)',
-              transition: 'all 0.3s',
-              cursor: 'pointer'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)';
-              e.currentTarget.style.boxShadow = '0 12px 32px rgba(0, 0, 0, 0.3)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0) scale(1)';
-              e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.2)';
-            }}
+            onClick={() => setShowLogin(true)}
+            className="btn"
+            style={{ padding: '16px 32px', fontSize: '16px' }}
           >
-            Start your free board
+            Get Started Free
+            <ArrowRight size={20} />
           </button>
         </div>
       </section>
 
-      {/* Footer */}
+      {/* ════════════ FOOTER ════════════ */}
       <footer style={{
-        background: 'var(--background)',
-        borderTop: '1px solid var(--border)',
-        paddingTop: '60px',
-        paddingBottom: '60px',
-        paddingLeft: '24px',
-        paddingRight: '24px',
-        textAlign: 'center'
+        padding: '40px 24px',
+        borderTop: '1px solid var(--border-primary)',
+        textAlign: 'center',
       }}>
-        <div style={{
-          maxWidth: '1200px',
-          margin: '0 auto'
-        }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '12px' }}>
           <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginBottom: '16px'
+            width: '24px', height: '24px', borderRadius: '6px',
+            background: 'var(--accent-gradient)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <span style={{
-              fontSize: '20px',
-              fontWeight: '800',
-              color: 'var(--foreground)',
-              letterSpacing: '-0.02em'
-            }}>
-              Pulse
-            </span>
+            <Zap size={13} color="white" fill="white" />
           </div>
-          <p style={{
-            color: 'var(--muted)',
-            fontSize: '15px',
-            margin: 0
-          }}>
-            © 2026 Pulse. Built with Next.js and NestJS.
-          </p>
+          <span style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)' }}>Pulse</span>
         </div>
+        <p style={{ color: 'var(--text-tertiary)', fontSize: '13px' }}>
+          © 2026 Pulse. Built with Next.js and NestJS.
+        </p>
       </footer>
+
+      <LoginModal
+        isOpen={showLogin}
+        onClose={() => setShowLogin(false)}
+        onSuccess={() => setShowLogin(false)}
+      />
     </div>
   );
 }
