@@ -154,6 +154,13 @@ export default function ProjectsPage() {
     }
   }
 
+  function openEditModal(project: Project) {
+    setEditingProject(project);
+    setName(project.name);
+    setDescription(project.description || "");
+    setShowEditModal(true);
+  }
+
   // Generate mock activity feed based on projects
   const activityFeed = useMemo(() => {
     if (!items.length) return [];
