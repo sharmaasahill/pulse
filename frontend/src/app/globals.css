@@ -586,23 +586,90 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════
-   RESPONSIVE
+   RESPONSIVE — Tablet (≤1024px)
    ═══════════════════════════════════════════════════ */
 
 @media (max-width: 1024px) {
+  :root {
+    --sidebar-width: 0px;
+    --sidebar-collapsed: 0px;
+  }
+
   .grid-3 {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .container {
+    padding: 0 20px;
   }
 }
 
+/* ═══════════════════════════════════════════════════
+   RESPONSIVE — Mobile (≤768px)
+   ═══════════════════════════════════════════════════ */
+
 @media (max-width: 768px) {
+  :root {
+    --navbar-height: 52px;
+  }
+
+  .grid-3 {
+    grid-template-columns: 1fr;
+  }
+
   .container {
     padding: 0 16px;
   }
 
   .modal {
-    padding: 24px;
-    margin: 16px;
+    padding: 20px;
+    margin: 12px;
+    max-width: calc(100vw - 24px);
     border-radius: var(--radius-lg);
+  }
+
+  .kanban-column {
+    min-height: 200px;
+  }
+
+  .btn {
+    padding: 10px 16px;
+    font-size: 13px;
+  }
+
+  .card {
+    padding: 16px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   RESPONSIVE — Small Mobile (≤480px)
+   ═══════════════════════════════════════════════════ */
+
+@media (max-width: 480px) {
+  :root {
+    --navbar-height: 48px;
+  }
+
+  .modal {
+    padding: 16px;
+    margin: 8px;
+    max-width: calc(100vw - 16px);
+    border-radius: var(--radius-md);
+  }
+
+  .btn {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  .input {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  .badge {
+    font-size: 11px;
+    padding: 2px 8px;
   }
 }

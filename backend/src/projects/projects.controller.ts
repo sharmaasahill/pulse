@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import { IsOptional, IsString } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { ProjectsService } from './projects.service';
@@ -28,13 +28,13 @@ export class ProjectsController {
   constructor(private readonly projects: ProjectsService) {}
 
   @Get()
-  list() {
-    return this.projects.list();
+  list(@Req() req: any) {
+    return this.projects.list(req.user.userId);
   }
 
   @Post()
-  async create(@Body() dto: CreateProjectDto) {
-    return this.projects.create(dto);
+  create(@Req() req: any, @Body() dto: CreateProjectDto) {
+    return this.projects.create({ ...dto, ownerId: req.user.userId });
   }
 
   @Get(':id')
@@ -58,5 +58,3 @@ export class ProjectsController {
     }
   }
 }
-
-

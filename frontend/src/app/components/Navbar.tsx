@@ -147,7 +147,7 @@ export function Navbar() {
                 <button
                   onClick={() => setShowLoginModal(true)}
                   className="btn-ghost"
-                  style={{ padding: '8px 14px', fontSize: '13px' }}
+                  style={{ padding: '8px 14px', fontSize: '13px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-primary)' }}
                 >
                   Log in
                 </button>

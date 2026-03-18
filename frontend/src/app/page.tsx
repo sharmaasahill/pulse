@@ -353,7 +353,7 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '32px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '32px' }}>
             {[
               { num: '01', title: 'Create an account', desc: 'Sign up with your email and a secure password. Takes less than 30 seconds.' },
               { num: '02', title: 'Set up your board', desc: 'Create a project, add tickets, and organize them across your columns.' },

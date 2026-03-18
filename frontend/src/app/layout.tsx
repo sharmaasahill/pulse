@@ -3,7 +3,7 @@ import "./globals.css";
 import { ThemeInitializer } from "./components/ThemeInitializer";
 
 export const metadata: Metadata = {
-  title: "Pulse",
+  title: "Pulse - Project Management",
   description: "Pulse is a modern, real-time project management dashboard built for teams who move fast.",
 };
 
