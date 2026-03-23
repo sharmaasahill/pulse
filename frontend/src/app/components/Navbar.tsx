@@ -1,15 +1,13 @@
 "use client";
 import { useState } from "react";
 import { useAuth } from "@/store/useAuth";
-import { useTheme } from "@/store/useTheme";
 import { LoginModal } from "./LoginModal";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, LogOut, Sun, Moon } from "lucide-react";
+import { LayoutDashboard, LogOut } from "lucide-react";
 
 export function Navbar() {
   const { token, logout, user } = useAuth();
-  const { theme, toggleTheme } = useTheme();
   const pathname = usePathname();
   const [showLoginModal, setShowLoginModal] = useState(false);
 
@@ -62,20 +60,6 @@ export function Navbar() {
 
           {/* Right side */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            {/* Theme Toggle */}
-            <button
-              onClick={toggleTheme}
-              className="btn-icon"
-              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: 'var(--radius-md)',
-              }}
-            >
-              {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-            </button>
-
             {token ? (
               <>
                 <Link

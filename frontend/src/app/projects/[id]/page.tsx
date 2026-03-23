@@ -1,130 +1,267 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { api, setAuthToken } from "@/lib/api";
 import { getSocket, joinProject } from "@/lib/socket";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/store/useAuth";
 import { Notifications } from "./notifications";
 import {
-  DndContext, DragEndEvent, DragOverlay, DragStartEvent,
+  DndContext, DragOverlay, DragEndEvent, DragStartEvent,
   PointerSensor, TouchSensor, useSensor, useSensors, useDroppable,
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Search, Plus, GripVertical, Edit2, Trash2, ArrowLeft } from "lucide-react";
+import {
+  Search, Plus, Edit2, Trash2, ArrowLeft, AlertCircle, X, CheckCircle2,
+  Clock, Zap, Circle, GripVertical, Flag, ChevronRight, Activity
+} from "lucide-react";
 
 interface Project { id: string; name: string; tickets?: Ticket[]; }
 interface Ticket {
   id: string; title: string; authorId?: string;
   author?: { id: string; email: string };
-  status: "TODO" | "IN_PROGRESS" | "DONE"; description?: string;
+  status: "TODO" | "IN_PROGRESS" | "DONE";
+  description?: string;
+  priority?: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
 }
 
-/* ─── Draggable Ticket ─── */
+type Priority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+
+const PRIORITY_META: Record<Priority, { color: string; bg: string; label: string }> = {
+  LOW: { color: "#6b7280", bg: "rgba(107,114,128,0.1)", label: "Low" },
+  MEDIUM: { color: "#f59e0b", bg: "rgba(245,158,11,0.1)", label: "Medium" },
+  HIGH: { color: "#f97316", bg: "rgba(249,115,22,0.1)", label: "High" },
+  URGENT: { color: "#ef4444", bg: "rgba(239,68,68,0.1)", label: "Urgent" },
+};
+
+const COL_META = {
+  TODO: {
+    color: "#94a3b8", glow: "rgba(148,163,184,0.15)", bg: "rgba(148,163,184,0.1)",
+    borderColor: "rgba(148,163,184,0.3)", label: "To Do", icon: <Circle size={14} />,
+  },
+  IN_PROGRESS: {
+    color: "#f97316", glow: "rgba(249,115,22,0.15)", bg: "rgba(249,115,22,0.1)",
+    borderColor: "rgba(249,115,22,0.35)", label: "In Progress", icon: <Zap size={14} />,
+  },
+  DONE: {
+    color: "#10b981", glow: "rgba(16,185,129,0.15)", bg: "rgba(16,185,129,0.1)",
+    borderColor: "rgba(16,185,129,0.35)", label: "Done", icon: <CheckCircle2 size={14} />,
+  },
+};
+
+/* ─── Draggable Ticket Card ─── */
 function DraggableTicket({ ticket, onEdit, onDelete }: {
-  ticket: Ticket;
-  onEdit: (t: Ticket) => void; onDelete: (t: Ticket) => void;
+  ticket: Ticket; onEdit: (t: Ticket) => void; onDelete: (t: Ticket) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: ticket.id });
+  const [hovered, setHovered] = useState(false);
+  const pri = PRIORITY_META[ticket.priority || "MEDIUM"];
 
   return (
     <div
       ref={setNodeRef}
       style={{
-        transform: CSS.Transform.toString(transform), transition,
-        opacity: isDragging ? 0.5 : 1, cursor: "grab",
-        background: "var(--bg-secondary)", borderRadius: "var(--radius-md)",
-        padding: "14px", marginBottom: "8px",
-        border: "1px solid var(--border-primary)",
-        position: "relative", boxShadow: "var(--shadow-xs)",
+        transform: CSS.Transform.toString(transform),
+        transition: transition ?? "border 0.2s, box-shadow 0.2s",
+        opacity: isDragging ? 0 : 1,
+        background: "rgba(255,255,255,0.04)",
+        border: `1px solid ${hovered ? "rgba(249,115,22,0.25)" : "rgba(255,255,255,0.07)"}`,
+        borderRadius: 14, padding: "14px 14px 12px", marginBottom: 8, position: "relative",
+        boxShadow: hovered ? "0 8px 24px rgba(0,0,0,0.4)" : "0 2px 8px rgba(0,0,0,0.2)",
+        cursor: isDragging ? "grabbing" : "grab",
       }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       {...attributes} {...listeners}
-      className="ticket-card"
     >
-      {/* Actions */}
-      <div style={{
-        position: "absolute", top: "8px", right: "8px",
-        display: "flex", gap: "4px", opacity: 0, transition: "opacity 0.15s",
-      }}
-        onMouseEnter={e => { e.currentTarget.style.opacity = "1"; }}
-        onMouseLeave={e => { e.currentTarget.style.opacity = "0"; }}
-      >
-        <button onClick={e => { e.stopPropagation(); onEdit(ticket); }} className="btn-icon" style={{ width: "24px", height: "24px", padding: "4px" }}>
-          <Edit2 size={12} />
-        </button>
-        <button onClick={e => { e.stopPropagation(); onDelete(ticket); }} className="btn-icon" style={{ width: "24px", height: "24px", padding: "4px", color: "var(--danger)" }}>
-          <Trash2 size={12} />
-        </button>
+      {/* Drag handle + actions */}
+      <div style={{ position: "absolute", top: 8, right: 8, display: "flex", gap: 4, opacity: hovered ? 1 : 0, transition: "opacity 0.15s", zIndex: 10 }}>
+        <button
+          onClick={e => { e.stopPropagation(); onEdit(ticket); }}
+          style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: 7, padding: "4px 5px", color: "rgba(255,255,255,0.7)", cursor: "pointer", display: "flex", alignItems: "center" }}
+        ><Edit2 size={12} /></button>
+        <button
+          onClick={e => { e.stopPropagation(); onDelete(ticket); }}
+          style={{ background: "rgba(239,68,68,0.12)", border: "none", borderRadius: 7, padding: "4px 5px", color: "#ef4444", cursor: "pointer", display: "flex", alignItems: "center" }}
+        ><Trash2 size={12} /></button>
       </div>
 
-      <div style={{ paddingRight: "50px" }}>
-        <h4 style={{ fontSize: "14px", fontWeight: "600", margin: "0 0 4px", color: "var(--text-primary)", lineHeight: 1.4 }}>
-          {ticket.title}
-        </h4>
-        {ticket.description && (
-          <p style={{ fontSize: "12px", color: "var(--text-tertiary)", margin: 0, lineHeight: 1.5 }}>
-            {ticket.description}
-          </p>
-        )}
+      {/* Priority pill */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+        <span style={{
+          fontSize: 10, fontWeight: 800, color: pri.color, background: pri.bg,
+          padding: "2px 7px", borderRadius: 5, textTransform: "uppercase", letterSpacing: "0.06em",
+          display: "flex", alignItems: "center", gap: 4,
+        }}>
+          <Flag size={9} />{pri.label}
+        </span>
+      </div>
+
+      {/* Title */}
+      <h4 style={{ fontSize: 13, fontWeight: 700, margin: "0 0 5px", color: "#fff", lineHeight: 1.4, paddingRight: hovered ? 44 : 0, transition: "padding 0.2s" }}>
+        {ticket.title}
+      </h4>
+
+      {/* Description */}
+      {ticket.description && (
+        <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", margin: "0 0 10px", lineHeight: 1.5, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+          {ticket.description}
+        </p>
+      )}
+
+      {/* Author */}
+      {ticket.author?.email && (
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
+          <div style={{ width: 20, height: 20, borderRadius: "50%", background: "linear-gradient(135deg,#f97316,#ea580c)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 800, color: "#fff", flexShrink: 0 }}>
+            {ticket.author.email[0].toUpperCase()}
+          </div>
+          <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 140 }}>
+            {ticket.author.email.split("@")[0]}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Column Quick Add ─── */
+function QuickAdd({ status, projectId, userEmail, onAdded }: { status: string; projectId: string; userEmail: string; onAdded: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [val, setVal] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit() {
+    if (!val.trim()) return;
+    setLoading(true);
+    try {
+      await api.post("/tickets", { projectId, title: val.trim(), status, authorEmail: userEmail });
+      setVal(""); setOpen(false); onAdded();
+    } catch { /* ignore */ }
+    finally { setLoading(false); }
+  }
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} style={{
+        width: "100%", display: "flex", alignItems: "center", gap: 6, padding: "9px 10px",
+        background: "rgba(255,255,255,0.03)", border: "1px dashed rgba(255,255,255,0.1)", borderRadius: 10,
+        color: "rgba(255,255,255,0.35)", fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all 0.2s", marginTop: 4,
+      }}
+        onMouseEnter={e => { e.currentTarget.style.background = "rgba(249,115,22,0.08)"; e.currentTarget.style.borderColor = "rgba(249,115,22,0.3)"; e.currentTarget.style.color = "#f97316"; }}
+        onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.03)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "rgba(255,255,255,0.35)"; }}
+      >
+        <Plus size={14} /> Add task
+      </button>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 6 }}>
+      <input
+        autoFocus value={val} onChange={e => setVal(e.target.value)}
+        onKeyDown={e => { if (e.key === "Enter") submit(); if (e.key === "Escape") setOpen(false); }}
+        placeholder="Task title…"
+        style={{
+          width: "100%", background: "rgba(0,0,0,0.4)", border: "1px solid rgba(249,115,22,0.4)",
+          borderRadius: 10, padding: "10px 12px", color: "#fff", fontSize: 13, outline: "none",
+          fontFamily: "inherit", boxShadow: "0 0 0 3px rgba(249,115,22,0.08)",
+        }}
+      />
+      <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+        <button onClick={submit} disabled={loading || !val.trim()} style={{
+          flex: 1, background: "#f97316", border: "none", borderRadius: 8, padding: "8px", color: "#fff",
+          fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+        }}>{loading ? "Adding…" : "Add"}</button>
+        <button onClick={() => { setOpen(false); setVal(""); }} style={{
+          background: "rgba(255,255,255,0.06)", border: "none", borderRadius: 8, padding: "8px 10px",
+          color: "rgba(255,255,255,0.6)", cursor: "pointer", display: "flex", alignItems: "center",
+        }}><X size={14} /></button>
       </div>
     </div>
   );
 }
 
 /* ─── Droppable Column ─── */
-function DroppableColumn({ id, title, tickets, className, onEdit, onDelete }: {
-  id: string; title: string; tickets: Ticket[];
-  className: string; onEdit: (t: Ticket) => void; onDelete: (t: Ticket) => void;
+function KanbanColumn({ id, tickets, onEdit, onDelete, projectId, userEmail, onAdded }: {
+  id: "TODO" | "IN_PROGRESS" | "DONE"; tickets: Ticket[];
+  onEdit: (t: Ticket) => void; onDelete: (t: Ticket) => void;
+  projectId: string; userEmail: string; onAdded: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id });
+  const meta = COL_META[id];
 
   return (
-    <div
-      ref={setNodeRef}
-      className={`kanban-column ${className}`}
-      style={{
-        background: isOver ? "var(--bg-hover)" : "var(--bg-tertiary)",
-        borderRadius: "var(--radius-lg)", padding: "16px", minHeight: "400px",
-        border: `1px solid ${isOver ? "var(--accent-primary)" : "var(--border-secondary)"}`,
-        transition: "all var(--transition-fast)",
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
-        <h3 style={{ fontSize: "13px", fontWeight: "700", margin: 0, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-          {title}
-        </h3>
-        <span className="badge badge-muted" style={{ fontSize: "11px" }}>
-          {tickets.length}
-        </span>
+    <div style={{
+      background: isOver ? "rgba(249,115,22,0.05)" : "rgba(255,255,255,0.02)",
+      border: `1px solid ${isOver ? meta.borderColor : "rgba(255,255,255,0.06)"}`,
+      borderRadius: 18, padding: 16, display: "flex", flexDirection: "column", minHeight: 480,
+      transition: "all 0.2s",
+      boxShadow: isOver ? `0 0 20px ${meta.glow}` : "none",
+    }} ref={setNodeRef}>
+      {/* Column Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ color: meta.color, display: "flex" }}>{meta.icon}</div>
+          <span style={{ fontSize: 13, fontWeight: 800, color: "#fff", letterSpacing: "0.02em" }}>{meta.label}</span>
+        </div>
+        <span style={{
+          fontSize: 11, fontWeight: 800, color: meta.color, background: meta.bg || "rgba(255,255,255,0.08)",
+          padding: "3px 9px", borderRadius: 20, minWidth: 24, textAlign: "center",
+        }}>{tickets.length}</span>
       </div>
-      <SortableContext items={tickets.map(t => t.id)} strategy={verticalListSortingStrategy}>
-        {tickets.map(t => (
-          <DraggableTicket key={t.id} ticket={t} onEdit={onEdit} onDelete={onDelete} />
-        ))}
-      </SortableContext>
+
+      {/* Top accent bar */}
+      <div style={{ height: 2, background: meta.color, borderRadius: 2, marginBottom: 14, opacity: 0.4 }} />
+
+      {/* Tickets */}
+      <div style={{ flex: 1 }}>
+        <SortableContext items={tickets.map(t => t.id)} strategy={verticalListSortingStrategy}>
+          {tickets.map(t => (
+            <DraggableTicket key={t.id} ticket={t} onEdit={onEdit} onDelete={onDelete} />
+          ))}
+        </SortableContext>
+        {tickets.length === 0 && !isOver && (
+          <div style={{ textAlign: "center", padding: "40px 16px", color: "rgba(255,255,255,0.15)", fontSize: 13 }}>
+            <div style={{ marginBottom: 6 }}>No tasks</div>
+            <div style={{ fontSize: 11 }}>Drop tasks here or add one below</div>
+          </div>
+        )}
+      </div>
+
+      {/* Quick add */}
+      <QuickAdd status={id} projectId={projectId} userEmail={userEmail} onAdded={onAdded} />
     </div>
   );
 }
 
-/* ─── Main Page ─── */
+/* ══════════ MAIN PAGE ══════════ */
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { token, logout, user } = useAuth();
   const projectId = params.id as string;
+
   const [project, setProject] = useState<Project | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState<Priority>("MEDIUM");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
-  const [showEditModal, setShowEditModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState<Ticket | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterPriority, setFilterPriority] = useState<Priority | "ALL">("ALL");
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } })
   );
+
+  function reloadProject() {
+    if (!token) return;
+    setAuthToken(token);
+    api.get(`/projects/${projectId}`).then(r => setProject(r.data)).catch(() => logout());
+  }
 
   useEffect(() => {
     if (!token) { router.push("/"); return; }
@@ -132,54 +269,44 @@ export default function ProjectDetailPage() {
     api.get(`/projects/${projectId}`).then(r => setProject(r.data)).catch(() => logout());
 
     const socket = getSocket();
-    if (socket.connected) { joinProject(projectId, user?.email || "anonymous"); }
-    else { socket.on("connect", () => { joinProject(projectId, user?.email || "anonymous"); }); }
+    const join = () => joinProject(projectId, user?.email || "anonymous");
+    if (socket.connected) join(); else socket.on("connect", join);
 
     socket.on("ticket:updated", (payload: { type: string; ticket: Ticket }) => {
-      setProject((prev: Project | null) => {
+      setProject(prev => {
         if (!prev) return prev;
         if (payload.type === "created") return { ...prev, tickets: [payload.ticket, ...(prev.tickets ?? [])] };
-        if (payload.type === "updated") return { ...prev, tickets: (prev.tickets ?? []).map((t: Ticket) => t.id === payload.ticket.id ? payload.ticket : t) };
+        if (payload.type === "updated") return { ...prev, tickets: (prev.tickets ?? []).map(t => t.id === payload.ticket.id ? payload.ticket : t) };
+        if (payload.type === "deleted") return { ...prev, tickets: (prev.tickets ?? []).filter(t => t.id !== payload.ticket.id) };
         return prev;
       });
     });
-
-    return () => { socket.off("ticket:updated"); socket.off("reconnect"); };
+    return () => { socket.off("ticket:updated"); };
   }, [projectId, token, logout, router, user?.email]);
 
-  useEffect(() => { if (token) setAuthToken(token); }, [token]);
-
   async function createTicket() {
-    if (!title) return;
+    if (!title.trim()) return;
     try {
-      await api.post("/tickets", { projectId, title, description, authorEmail: user?.email });
-      setTitle(""); setDescription("");
+      await api.post("/tickets", { projectId, title: title.trim(), description: description.trim(), priority, authorEmail: user?.email });
+      setTitle(""); setDescription(""); setPriority("MEDIUM"); setShowCreateModal(false);
     } catch { /* ignore */ }
   }
 
   async function updateTicket() {
-    if (!editingTicket || !title) return;
+    if (!editingTicket || !title.trim()) return;
     try {
-      await api.patch(`/tickets/${editingTicket.id}`, { title, description });
-      setEditingTicket(null); setTitle(""); setDescription(""); setShowEditModal(false);
+      await api.patch(`/tickets/${editingTicket.id}`, { title: title.trim(), description: description.trim(), priority });
+      setEditingTicket(null); setTitle(""); setDescription(""); setPriority("MEDIUM");
     } catch { /* ignore */ }
   }
 
   async function deleteTicket(ticketId: string) {
-    try { await api.delete(`/tickets/${ticketId}`); setShowDeleteModal(null); }
+    try { await api.delete(`/tickets/${ticketId}`); setProject(prev => prev ? { ...prev, tickets: (prev.tickets ?? []).filter(t => t.id !== ticketId) } : prev); setShowDeleteModal(null); }
     catch { /* ignore */ }
   }
 
   function openEditModal(ticket: Ticket) {
-    setEditingTicket(ticket); setTitle(ticket.title); setDescription(ticket.description || ""); setShowEditModal(true);
-  }
-
-  function filteredTickets(tickets: Ticket[], status: string) {
-    return tickets.filter(t => {
-      const matchStatus = t.status === status;
-      const matchSearch = !searchQuery || t.title.toLowerCase().includes(searchQuery.toLowerCase()) || (t.description && t.description.toLowerCase().includes(searchQuery.toLowerCase()));
-      return matchStatus && matchSearch;
-    });
+    setEditingTicket(ticket); setTitle(ticket.title); setDescription(ticket.description || ""); setPriority(ticket.priority || "MEDIUM");
   }
 
   async function handleDragEnd(event: DragEndEvent) {
@@ -189,137 +316,246 @@ export default function ProjectDetailPage() {
     const ticket = project.tickets?.find(t => t.id === (active.id as string));
     const newStatus = over.id as "TODO" | "IN_PROGRESS" | "DONE";
     if (!ticket || ticket.status === newStatus) return;
+    setProject(prev => prev ? { ...prev, tickets: (prev.tickets ?? []).map(t => t.id === ticket.id ? { ...t, status: newStatus } : t) } : prev);
     try { await api.patch(`/tickets/${ticket.id}`, { status: newStatus }); }
-    catch { /* ignore */ }
+    catch { reloadProject(); }
   }
+
+  const filter = (tickets: Ticket[], status: string) => tickets.filter(t => {
+    const s = t.status === status;
+    const q = !searchQuery || t.title.toLowerCase().includes(searchQuery.toLowerCase()) || (t.description?.toLowerCase().includes(searchQuery.toLowerCase()));
+    const p = filterPriority === "ALL" || t.priority === filterPriority || (!t.priority && filterPriority === "MEDIUM");
+    return s && q && p;
+  });
+
+  const stats = useMemo(() => {
+    const all = project?.tickets ?? [];
+    const total = all.length;
+    const done = all.filter(t => t.status === "DONE").length;
+    const inProg = all.filter(t => t.status === "IN_PROGRESS").length;
+    const urgent = all.filter(t => t.priority === "URGENT" || t.priority === "HIGH").length;
+    const progress = total > 0 ? Math.round((done / total) * 100) : 0;
+    return { total, done, inProg, urgent, progress };
+  }, [project]);
 
   if (!project) {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div className="spinner" />
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#111" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+          <div style={{ width: 40, height: 40, border: "3px solid rgba(249,115,22,0.2)", borderTopColor: "#f97316", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+          <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 14 }}>Loading board…</span>
+        </div>
       </div>
     );
   }
 
+  const activeTicket = project.tickets?.find(t => t.id === activeId);
+
   return (
-    <div style={{ minHeight: "calc(100vh - var(--navbar-height))" }}>
-      {/* Board Header */}
-      <div className="page-container" style={{
-        paddingTop: "24px", paddingBottom: "24px",
-        borderBottom: "1px solid var(--border-primary)",
-        background: "var(--bg-secondary)",
-      }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-            <button onClick={() => router.push("/projects")} className="btn-icon" style={{ width: "32px", height: "32px" }}>
-              <ArrowLeft size={18} />
-            </button>
+    <div style={{ minHeight: "100vh", background: "#111111", color: "#fff", fontFamily: "Inter, -apple-system, sans-serif" }}>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: translateX(0); } }
+        .board-input {
+          width: 100%; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 12px; padding: 12px 14px; color: #fff; font-size: 14px;
+          outline: none; transition: all 0.2s; font-family: inherit;
+        }
+        .board-input:focus { border-color: rgba(249,115,22,0.5); box-shadow: 0 0 0 3px rgba(249,115,22,0.1); }
+        .board-input::placeholder { color: rgba(255,255,255,0.3); }
+        .btn-orange-sm {
+          background: linear-gradient(135deg,#f97316,#ea580c); border: none; color: #fff;
+          font-size: 13px; font-weight: 700; cursor: pointer; padding: 10px 18px; border-radius: 10px;
+          display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s; font-family: inherit;
+          box-shadow: 0 4px 12px rgba(249,115,22,0.3);
+        }
+        .btn-orange-sm:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(249,115,22,0.4); }
+        .btn-orange-sm:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+        .modal-glass {
+          position: fixed; inset: 0; z-index: 9999;
+          background: rgba(0,0,0,0.75); backdrop-filter: blur(12px);
+          display: flex; align-items: center; justify-content: center; padding: 24px;
+        }
+        .modal-panel {
+          background: rgba(18,18,18,0.98); border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 24px; padding: 32px; width: 100%; max-width: 500px;
+          box-shadow: 0 32px 64px rgba(0,0,0,0.7); animation: slideIn 0.35s cubic-bezier(0.16,1,0.3,1);
+          position: relative;
+        }
+        .pri-btn {
+          flex: 1; padding: 8px 4px; border-radius: 8px; border: 1px solid transparent;
+          font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.15s; font-family: inherit;
+          display: flex; align-items: center; justify-content: center; gap: 4px;
+        }
+        .filter-chip {
+          padding: 5px 12px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1);
+          background: transparent; color: rgba(255,255,255,0.45); font-size: 12px; font-weight: 700;
+          cursor: pointer; transition: all 0.15s; font-family: inherit;
+        }
+        .filter-chip.active { background: rgba(249,115,22,0.15); border-color: rgba(249,115,22,0.4); color: #f97316; }
+      `}</style>
+
+      {/* ══════════ HEADER ══════════ */}
+      <div style={{ padding: "20px 32px", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)", position: "sticky", top: 0, zIndex: 100, backdropFilter: "blur(16px)" }}>
+        <div style={{ maxWidth: 1440, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <button onClick={() => router.push("/projects")} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "7px", display: "flex", alignItems: "center", color: "rgba(255,255,255,0.7)", cursor: "pointer", transition: "all 0.2s" }}
+              onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.12)"}
+              onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.06)"}
+            ><ArrowLeft size={18} /></button>
             <div>
-              <h1 style={{ fontSize: "22px", fontWeight: "800", margin: 0, letterSpacing: "-0.5px" }}>
-                {project.name}
-              </h1>
-              <p style={{ margin: "2px 0 0", color: "var(--text-tertiary)", fontSize: "13px" }}>
-                {(project.tickets ?? []).length} ticket{(project.tickets ?? []).length !== 1 ? "s" : ""}
+              <h1 style={{ fontSize: 20, fontWeight: 900, margin: 0, letterSpacing: "-0.02em" }}>{project.name}</h1>
+              <p style={{ margin: "2px 0 0", color: "rgba(255,255,255,0.4)", fontSize: 12 }}>
+                {stats.total} tasks · {stats.progress}% complete
               </p>
             </div>
           </div>
-          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+
+          {/* Header right */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {/* Search */}
+            <div style={{ position: "relative" }}>
+              <Search size={14} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.3)" }} />
+              <input placeholder="Search tasks…" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: 10, padding: "8px 12px 8px 32px", color: "#fff", fontSize: 13, outline: "none", width: 200, fontFamily: "inherit" }} />
+            </div>
+            <button className="btn-orange-sm" onClick={() => { setTitle(""); setDescription(""); setPriority("MEDIUM"); setEditingTicket(null); setShowCreateModal(true); }}>
+              <Plus size={15} /> Add Task
+            </button>
+          </div>
+        </div>
+
+        {/* Mini stats */}
+        <div style={{ maxWidth: 1440, margin: "12px auto 0", display: "flex", gap: 16, alignItems: "center" }}>
+          <div style={{ flex: 1, height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 4, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${stats.progress}%`, background: "linear-gradient(90deg,#f97316,#10b981)", borderRadius: 4, transition: "width 0.8s cubic-bezier(0.16,1,0.3,1)" }} />
+          </div>
+          <div style={{ display: "flex", gap: 20, fontSize: 12, color: "rgba(255,255,255,0.4)", fontWeight: 600, whiteSpace: "nowrap" }}>
+            <span><span style={{ color: "#94a3b8" }}>●</span> {(project.tickets ?? []).filter(t => t.status === "TODO").length} todo</span>
+            <span><span style={{ color: "#f97316" }}>●</span> {stats.inProg} active</span>
+            <span><span style={{ color: "#10b981" }}>●</span> {stats.done} done</span>
+            {stats.urgent > 0 && <span style={{ color: "#ef4444" }}><span>⚡ </span>{stats.urgent} urgent</span>}
           </div>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="page-container" style={{ paddingTop: "24px", paddingBottom: "24px" }}>
-        {/* Add Ticket + Search */}
-        <div style={{
-          marginBottom: "24px", background: "var(--bg-secondary)",
-          border: "1px solid var(--border-primary)", borderRadius: "var(--radius-lg)",
-          padding: "20px",
-        }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
-            <h2 style={{ fontSize: "15px", fontWeight: "700", margin: 0, color: "var(--text-primary)" }}>
-              Add New Ticket
-            </h2>
-            <div style={{ position: "relative" }}>
-              <Search size={14} style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "var(--text-tertiary)" }} />
-              <input
-                className="input"
-                placeholder="Search tickets..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                style={{ width: "200px", paddingLeft: "32px", fontSize: "13px" }}
-              />
-            </div>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            <input className="input" placeholder="Ticket title" value={title} onChange={e => setTitle(e.target.value)} onKeyDown={e => e.key === "Enter" && createTicket()} />
-            <textarea className="input" placeholder="Description (optional)" value={description} onChange={e => setDescription(e.target.value)} rows={2} style={{ resize: "vertical", minHeight: "52px" }} />
-            <button onClick={createTicket} className="btn" style={{ alignSelf: "flex-start", padding: "8px 18px", fontSize: "13px" }}>
-              <Plus size={15} /> Add Ticket
-            </button>
-          </div>
-        </div>
+      {/* ══════════ FILTER BAR ══════════ */}
+      <div style={{ padding: "12px 32px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.3)", marginRight: 4 }}>Priority:</span>
+        {(["ALL", "URGENT", "HIGH", "MEDIUM", "LOW"] as const).map(p => (
+          <button key={p} className={`filter-chip${filterPriority === p ? " active" : ""}`}
+            onClick={() => setFilterPriority(p)}
+            style={p !== "ALL" ? { ...(filterPriority === p ? {} : { color: PRIORITY_META[p as Priority]?.color + "90" }) } : {}}>
+            {p === "ALL" ? "All" : PRIORITY_META[p as Priority].label}
+          </button>
+        ))}
+      </div>
 
-        {/* Kanban Board */}
-        <DndContext sensors={sensors} onDragStart={e => setActiveId(e.active.id as string)} onDragEnd={handleDragEnd}>
-          <div className="grid grid-3">
-            <DroppableColumn id="TODO" title="To Do" tickets={filteredTickets(project.tickets ?? [], "TODO")} className="todo" onEdit={openEditModal} onDelete={t => setShowDeleteModal(t)} />
-            <DroppableColumn id="IN_PROGRESS" title="In Progress" tickets={filteredTickets(project.tickets ?? [], "IN_PROGRESS")} className="in-progress" onEdit={openEditModal} onDelete={t => setShowDeleteModal(t)} />
-            <DroppableColumn id="DONE" title="Done" tickets={filteredTickets(project.tickets ?? [], "DONE")} className="done" onEdit={openEditModal} onDelete={t => setShowDeleteModal(t)} />
+      {/* ══════════ KANBAN BOARD ══════════ */}
+      <div style={{ padding: "24px 32px 48px", maxWidth: 1440, margin: "0 auto" }}>
+        <DndContext sensors={sensors} onDragStart={(e: DragStartEvent) => setActiveId(e.active.id as string)} onDragEnd={handleDragEnd}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+            {(["TODO", "IN_PROGRESS", "DONE"] as const).map(status => (
+              <KanbanColumn key={status} id={status} tickets={filter(project.tickets ?? [], status)}
+                onEdit={openEditModal} onDelete={t => setShowDeleteModal(t)}
+                projectId={projectId} userEmail={user?.email || ""} onAdded={reloadProject} />
+            ))}
           </div>
+
           <DragOverlay>
-            {activeId ? (
+            {activeId && activeTicket ? (
               <div style={{
-                padding: "14px", background: "var(--bg-secondary)",
-                border: "1px solid var(--accent-primary)", borderRadius: "var(--radius-md)",
-                boxShadow: "var(--shadow-lg)", transform: "rotate(3deg)",
+                padding: 14, background: "rgba(20,20,20,0.95)",
+                border: "1px solid rgba(249,115,22,0.4)", borderRadius: 14,
+                boxShadow: "0 20px 48px rgba(0,0,0,0.6), 0 0 24px rgba(249,115,22,0.15)",
+                transform: "rotate(1.5deg)",
               }}>
-                <h4 style={{ fontSize: "14px", fontWeight: "600", margin: 0, color: "var(--text-primary)" }}>
-                  {(project.tickets ?? []).find(t => t.id === activeId)?.title}
-                </h4>
+                <h4 style={{ fontSize: 13, fontWeight: 700, margin: 0, color: "#fff" }}>{activeTicket.title}</h4>
               </div>
             ) : null}
           </DragOverlay>
         </DndContext>
 
         {/* Notifications */}
-        <div style={{ marginTop: "32px" }}>
+        <div style={{ marginTop: 40, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+            <Activity size={16} color="#f97316" />
+            <span style={{ fontSize: 14, fontWeight: 800, color: "#fff" }}>Recent Activity</span>
+          </div>
           <Notifications projectId={projectId} />
         </div>
       </div>
 
-      {/* ── Edit Modal ── */}
-      {showEditModal && editingTicket && (
-        <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <h2 style={{ fontSize: "22px", fontWeight: "700", marginBottom: "20px" }}>Edit Ticket</h2>
-            <div style={{ marginBottom: "14px" }}>
-              <label style={{ display: "block", fontSize: "13px", fontWeight: "600", color: "var(--text-secondary)", marginBottom: "6px" }}>Title</label>
-              <input className="input" value={title} onChange={e => setTitle(e.target.value)} autoFocus />
+      {/* ══════════ CREATE / EDIT MODAL ══════════ */}
+      {(showCreateModal || editingTicket) && (
+        <div className="modal-glass" onClick={() => { setShowCreateModal(false); setEditingTicket(null); }}>
+          <div className="modal-panel" onClick={e => e.stopPropagation()}>
+            <button onClick={() => { setShowCreateModal(false); setEditingTicket(null); }} style={{ position: "absolute", top: 20, right: 20, background: "rgba(255,255,255,0.06)", border: "none", borderRadius: "50%", width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.6)", cursor: "pointer" }}><X size={15} /></button>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: editingTicket ? "rgba(99,102,241,0.15)" : "rgba(249,115,22,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {editingTicket ? <Edit2 size={18} color="#818cf8" /> : <Plus size={18} color="#f97316" />}
+              </div>
+              <h2 style={{ fontSize: 20, fontWeight: 800, margin: 0, letterSpacing: "-0.02em" }}>
+                {editingTicket ? "Edit Task" : "New Task"}
+              </h2>
             </div>
-            <div style={{ marginBottom: "20px" }}>
-              <label style={{ display: "block", fontSize: "13px", fontWeight: "600", color: "var(--text-secondary)", marginBottom: "6px" }}>Description</label>
-              <textarea className="input" value={description} onChange={e => setDescription(e.target.value)} rows={3} style={{ resize: "vertical" }} />
+            <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 13, marginBottom: 24 }}>
+              {editingTicket ? "Update task details below." : "Add a new task to your board."}
+            </p>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.4)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.08em" }}>Title *</label>
+              <input className="board-input" placeholder="e.g. Implement auth flow" value={title} onChange={e => setTitle(e.target.value)} autoFocus onKeyDown={e => e.key === "Enter" && (editingTicket ? updateTicket() : createTicket())} />
             </div>
-            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-              <button className="btn-ghost" onClick={() => setShowEditModal(false)} style={{ padding: "10px 16px", fontSize: "14px", borderRadius: "var(--radius-md)", border: "none", cursor: "pointer" }}>Cancel</button>
-              <button className="btn" onClick={updateTicket} disabled={!title.trim()} style={{ padding: "10px 20px", fontSize: "14px" }}>Update</button>
+
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.4)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.08em" }}>Description</label>
+              <textarea className="board-input" placeholder="Add more context (optional)…" value={description} onChange={e => setDescription(e.target.value)} rows={3} style={{ resize: "vertical", minHeight: 80 }} />
+            </div>
+
+            <div style={{ marginBottom: 28 }}>
+              <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.4)", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.08em" }}>Priority</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                {(["LOW", "MEDIUM", "HIGH", "URGENT"] as Priority[]).map(p => {
+                  const pm = PRIORITY_META[p];
+                  const active = priority === p;
+                  return (
+                    <button key={p} className="pri-btn" onClick={() => setPriority(p)}
+                      style={{ color: active ? pm.color : "rgba(255,255,255,0.4)", background: active ? pm.bg : "rgba(255,255,255,0.04)", borderColor: active ? pm.color + "50" : "rgba(255,255,255,0.08)" }}>
+                      <Flag size={11} />{pm.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button onClick={() => { setShowCreateModal(false); setEditingTicket(null); }} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "10px 18px", color: "rgba(255,255,255,0.7)", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
+              <button className="btn-orange-sm" style={{ padding: "10px 20px", fontSize: 14 }} onClick={editingTicket ? updateTicket : createTicket} disabled={!title.trim()}>
+                {editingTicket ? "Save Changes" : <><Plus size={15} /> Create Task</>}
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Delete Modal ── */}
+      {/* ══════════ DELETE MODAL ══════════ */}
       {showDeleteModal && (
-        <div className="modal-overlay" onClick={() => setShowDeleteModal(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <h2 style={{ fontSize: "22px", fontWeight: "700", marginBottom: "12px" }}>Delete Ticket</h2>
-            <p style={{ color: "var(--text-secondary)", fontSize: "14px", lineHeight: 1.6, marginBottom: "20px" }}>
-              Are you sure you want to delete &ldquo;<strong>{showDeleteModal.title}</strong>&rdquo;? This cannot be undone.
+        <div className="modal-glass" onClick={() => setShowDeleteModal(null)}>
+          <div className="modal-panel" onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: "rgba(239,68,68,0.12)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <AlertCircle size={22} color="#ef4444" />
+              </div>
+              <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Delete Task?</h2>
+            </div>
+            <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>
+              You're about to delete <strong style={{ color: "#fff" }}>"{showDeleteModal.title}"</strong>. This action cannot be undone.
             </p>
-            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-              <button className="btn-ghost" onClick={() => setShowDeleteModal(null)} style={{ padding: "10px 16px", fontSize: "14px", borderRadius: "var(--radius-md)", border: "none", cursor: "pointer" }}>Cancel</button>
-              <button className="btn-danger" onClick={() => deleteTicket(showDeleteModal.id)} style={{ padding: "10px 16px", fontSize: "14px", borderRadius: "var(--radius-md)", border: "none", cursor: "pointer", fontWeight: "600" }}>Delete</button>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button onClick={() => setShowDeleteModal(null)} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "10px 18px", color: "rgba(255,255,255,0.7)", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
+              <button onClick={() => deleteTicket(showDeleteModal.id)} style={{ background: "#ef4444", border: "none", color: "#fff", fontSize: 14, fontWeight: 700, padding: "10px 18px", borderRadius: 12, cursor: "pointer", fontFamily: "inherit" }}>Delete Task</button>
             </div>
           </div>
         </div>
