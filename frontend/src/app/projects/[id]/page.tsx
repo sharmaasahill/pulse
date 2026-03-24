@@ -1,18 +1,21 @@
 "use client";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { api, setAuthToken } from "@/lib/api";
 import { getSocket, joinProject } from "@/lib/socket";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/store/useAuth";
 import { Notifications } from "./notifications";
-import {
-  DndContext, DragOverlay, DragEndEvent, DragStartEvent,
-  PointerSensor, TouchSensor, useSensor, useSensors, useDroppable,
+import { 
+  DndContext, DragOverlay, closestCorners, MouseSensor, 
+  useSensor, useSensors, DragStartEvent, DragEndEvent, useDroppable
 } from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
+import { 
+  SortableContext, arrayMove, sortableKeyboardCoordinates, 
+  verticalListSortingStrategy, useSortable 
+} from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  Search, Plus, Edit2, Trash2, ArrowLeft, AlertCircle, X, CheckCircle2,
+  Search, Plus, Edit2, Trash2, ArrowLeft, ArrowRight, AlertCircle, X, CheckCircle2,
   Clock, Zap, Circle, GripVertical, Flag, ChevronRight, Activity
 } from "lucide-react";
 
@@ -50,8 +53,9 @@ const COL_META = {
 };
 
 /* ─── Draggable Ticket Card ─── */
-function DraggableTicket({ ticket, onEdit, onDelete }: {
+function DraggableTicket({ ticket, onEdit, onDelete, onMove }: {
   ticket: Ticket; onEdit: (t: Ticket) => void; onDelete: (t: Ticket) => void;
+  onMove: (id: string, st: "TODO" | "IN_PROGRESS" | "DONE") => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: ticket.id });
   const [hovered, setHovered] = useState(false);
@@ -120,6 +124,22 @@ function DraggableTicket({ ticket, onEdit, onDelete }: {
           </span>
         </div>
       )}
+
+      {/* Mobile Move Actions */}
+      <div className="mobile-move-actions" style={{ display: "none", gap: 8, marginTop: 12, borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 12 }}>
+        {ticket.status !== "TODO" && (
+          <button onClick={e => { e.stopPropagation(); onMove(ticket.id, ticket.status === "DONE" ? "IN_PROGRESS" : "TODO"); }} 
+            style={{ flex: 1, padding: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "rgba(255,255,255,0.6)", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, cursor: "pointer" }}>
+            <ArrowLeft size={14} /> Back
+          </button>
+        )}
+        {ticket.status !== "DONE" && (
+          <button onClick={e => { e.stopPropagation(); onMove(ticket.id, ticket.status === "TODO" ? "IN_PROGRESS" : "DONE"); }}
+            style={{ flex: 1, padding: "8px", background: "rgba(249,115,22,0.1)", border: "1px solid rgba(249,115,22,0.3)", borderRadius: 8, color: "#f97316", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, cursor: "pointer", fontWeight: 700 }}>
+            Next <ArrowRight size={14} />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -182,9 +202,10 @@ function QuickAdd({ status, projectId, userEmail, onAdded }: { status: string; p
 }
 
 /* ─── Droppable Column ─── */
-function KanbanColumn({ id, tickets, onEdit, onDelete, projectId, userEmail, onAdded }: {
+function KanbanColumn({ id, tickets, onEdit, onDelete, projectId, userEmail, onAdded, onMove }: {
   id: "TODO" | "IN_PROGRESS" | "DONE"; tickets: Ticket[];
   onEdit: (t: Ticket) => void; onDelete: (t: Ticket) => void;
+  onMove: (id: string, st: "TODO" | "IN_PROGRESS" | "DONE") => void;
   projectId: string; userEmail: string; onAdded: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id });
@@ -217,7 +238,7 @@ function KanbanColumn({ id, tickets, onEdit, onDelete, projectId, userEmail, onA
       <div style={{ flex: 1 }}>
         <SortableContext items={tickets.map(t => t.id)} strategy={verticalListSortingStrategy}>
           {tickets.map(t => (
-            <DraggableTicket key={t.id} ticket={t} onEdit={onEdit} onDelete={onDelete} />
+            <DraggableTicket key={t.id} ticket={t} onEdit={onEdit} onDelete={onDelete} onMove={onMove} />
           ))}
         </SortableContext>
         {tickets.length === 0 && !isOver && (
@@ -253,26 +274,45 @@ export default function ProjectDetailPage() {
   const [filterPriority, setFilterPriority] = useState<Priority | "ALL">("ALL");
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } })
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } })
   );
 
+  const initialized = useRef(false);
+
   function reloadProject() {
-    if (!token) return;
-    setAuthToken(token);
-    api.get(`/projects/${projectId}`).then(r => setProject(r.data)).catch(() => logout());
+    const authToken = useAuth.getState().token;
+    if (!authToken) return;
+    setAuthToken(authToken);
+    api.get(`/projects/${projectId}`)
+      .then(r => setProject(r.data))
+      .catch((err: any) => {
+        if (err?.response?.status === 401) { logout(); router.push("/"); }
+      });
   }
 
   useEffect(() => {
-    if (!token) { router.push("/"); return; }
-    setAuthToken(token);
-    api.get(`/projects/${projectId}`).then(r => setProject(r.data)).catch(() => logout());
+    if (!initialized.current) {
+      initialized.current = true;
+      const stored = localStorage.getItem("auth-storage");
+      let parsedToken: string | null = null;
+      try { if (stored) parsedToken = JSON.parse(stored)?.state?.token ?? null; } catch { /* ignore */ }
+      const authToken = useAuth.getState().token ?? parsedToken;
+
+      if (!authToken) { router.push("/"); return; }
+
+      setAuthToken(authToken);
+      api.get(`/projects/${projectId}`)
+        .then(r => setProject(r.data))
+        .catch((err: any) => {
+          if (err?.response?.status === 401) { logout(); router.push("/"); }
+        });
+    }
 
     const socket = getSocket();
-    const join = () => joinProject(projectId, user?.email || "anonymous");
+    const join = () => joinProject(projectId, user?.id || "anonymous");
     if (socket.connected) join(); else socket.on("connect", join);
 
-    socket.on("ticket:updated", (payload: { type: string; ticket: Ticket }) => {
+    const handleTicketUpdate = (payload: { type: string; ticket: Ticket }) => {
       setProject(prev => {
         if (!prev) return prev;
         if (payload.type === "created") return { ...prev, tickets: [payload.ticket, ...(prev.tickets ?? [])] };
@@ -280,9 +320,16 @@ export default function ProjectDetailPage() {
         if (payload.type === "deleted") return { ...prev, tickets: (prev.tickets ?? []).filter(t => t.id !== payload.ticket.id) };
         return prev;
       });
-    });
-    return () => { socket.off("ticket:updated"); };
-  }, [projectId, token, logout, router, user?.email]);
+    };
+
+    socket.on("ticket:updated", handleTicketUpdate);
+
+    return () => {
+      socket.off("connect", join);
+      socket.off("ticket:updated", handleTicketUpdate);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, user?.email]);
 
   async function createTicket() {
     if (!title.trim()) return;
@@ -309,16 +356,28 @@ export default function ProjectDetailPage() {
     setEditingTicket(ticket); setTitle(ticket.title); setDescription(ticket.description || ""); setPriority(ticket.priority || "MEDIUM");
   }
 
+  async function moveTicket(ticketId: string, newStatus: "TODO" | "IN_PROGRESS" | "DONE") {
+    if (!project) return;
+    const ticket = project.tickets?.find(t => t.id === ticketId);
+    if (!ticket || ticket.status === newStatus) return;
+    setProject(prev => prev ? { ...prev, tickets: (prev.tickets ?? []).map(t => t.id === ticketId ? { ...t, status: newStatus } : t) } : prev);
+    try { await api.patch(`/tickets/${ticketId}`, { status: newStatus }); }
+    catch { reloadProject(); }
+  }
+
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     setActiveId(null);
     if (!over || !project) return;
-    const ticket = project.tickets?.find(t => t.id === (active.id as string));
-    const newStatus = over.id as "TODO" | "IN_PROGRESS" | "DONE";
-    if (!ticket || ticket.status === newStatus) return;
-    setProject(prev => prev ? { ...prev, tickets: (prev.tickets ?? []).map(t => t.id === ticket.id ? { ...t, status: newStatus } : t) } : prev);
-    try { await api.patch(`/tickets/${ticket.id}`, { status: newStatus }); }
-    catch { reloadProject(); }
+    
+    let newStatus = over.id as string;
+    if (!["TODO", "IN_PROGRESS", "DONE"].includes(newStatus)) {
+      const overTicket = project.tickets?.find(t => t.id === newStatus);
+      if (!overTicket) return;
+      newStatus = overTicket.status;
+    }
+    
+    moveTicket(active.id as string, newStatus as "TODO" | "IN_PROGRESS" | "DONE");
   }
 
   const filter = (tickets: Ticket[], status: string) => tickets.filter(t => {
@@ -396,15 +455,15 @@ export default function ProjectDetailPage() {
       `}</style>
 
       {/* ══════════ HEADER ══════════ */}
-      <div style={{ padding: "20px 32px", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)", position: "sticky", top: 0, zIndex: 100, backdropFilter: "blur(16px)" }}>
-        <div style={{ maxWidth: 1440, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+      <div className="project-header-section" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)", position: "sticky", top: 0, zIndex: 100, backdropFilter: "blur(16px)" }}>
+        <div className="project-header-row">
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <button onClick={() => router.push("/projects")} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "7px", display: "flex", alignItems: "center", color: "rgba(255,255,255,0.7)", cursor: "pointer", transition: "all 0.2s" }}
               onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.12)"}
               onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.06)"}
             ><ArrowLeft size={18} /></button>
             <div>
-              <h1 style={{ fontSize: 20, fontWeight: 900, margin: 0, letterSpacing: "-0.02em" }}>{project.name}</h1>
+              <h1 style={{ fontSize: 20, fontWeight: 900, margin: 0, letterSpacing: "-0.02em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{project.name}</h1>
               <p style={{ margin: "2px 0 0", color: "rgba(255,255,255,0.4)", fontSize: 12 }}>
                 {stats.total} tasks · {stats.progress}% complete
               </p>
@@ -412,14 +471,14 @@ export default function ProjectDetailPage() {
           </div>
 
           {/* Header right */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div className="project-header-right">
             {/* Search */}
-            <div style={{ position: "relative" }}>
+            <div className="search-input-wrapper">
               <Search size={14} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.3)" }} />
               <input placeholder="Search tasks…" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: 10, padding: "8px 12px 8px 32px", color: "#fff", fontSize: 13, outline: "none", width: 200, fontFamily: "inherit" }} />
+                style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: 10, padding: "8px 12px 8px 32px", color: "#fff", fontSize: 13, outline: "none", width: 220, fontFamily: "inherit" }} />
             </div>
-            <button className="btn-orange-sm" onClick={() => { setTitle(""); setDescription(""); setPriority("MEDIUM"); setEditingTicket(null); setShowCreateModal(true); }}>
+            <button className="btn-orange-sm" style={{ flexShrink: 0 }} onClick={() => { setTitle(""); setDescription(""); setPriority("MEDIUM"); setEditingTicket(null); setShowCreateModal(true); }}>
               <Plus size={15} /> Add Task
             </button>
           </div>
@@ -440,7 +499,7 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* ══════════ FILTER BAR ══════════ */}
-      <div style={{ padding: "12px 32px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", gap: 8 }}>
+      <div className="project-filter-bar">
         <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.3)", marginRight: 4 }}>Priority:</span>
         {(["ALL", "URGENT", "HIGH", "MEDIUM", "LOW"] as const).map(p => (
           <button key={p} className={`filter-chip${filterPriority === p ? " active" : ""}`}
@@ -452,12 +511,12 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* ══════════ KANBAN BOARD ══════════ */}
-      <div style={{ padding: "24px 32px 48px", maxWidth: 1440, margin: "0 auto" }}>
+      <div className="kanban-page-wrapper">
         <DndContext sensors={sensors} onDragStart={(e: DragStartEvent) => setActiveId(e.active.id as string)} onDragEnd={handleDragEnd}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+          <div className="kanban-board">
             {(["TODO", "IN_PROGRESS", "DONE"] as const).map(status => (
               <KanbanColumn key={status} id={status} tickets={filter(project.tickets ?? [], status)}
-                onEdit={openEditModal} onDelete={t => setShowDeleteModal(t)}
+                onEdit={openEditModal} onDelete={t => setShowDeleteModal(t)} onMove={moveTicket}
                 projectId={projectId} userEmail={user?.email || ""} onAdded={reloadProject} />
             ))}
           </div>

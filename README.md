@@ -1,80 +1,65 @@
-<div align="center">
-
-<h1>Pulse</h1>
-<p><strong>Real-time project management with Kanban boards</strong></p>
-
-[![Live Demo](https://img.shields.io/badge/Live-Demo-brightgreen?style=for-the-badge&logo=netlify)](https://pulse-front.netlify.app/)
-[![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
-
-![Next.js](https://img.shields.io/badge/Next.js-000?style=flat-square&logo=next.js)
-![NestJS](https://img.shields.io/badge/NestJS-E0234E?style=flat-square&logo=nestjs&logoColor=white)
-![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-336791?style=flat-square&logo=postgresql&logoColor=white)
-![Prisma](https://img.shields.io/badge/Prisma-2D3748?style=flat-square&logo=prisma&logoColor=white)
-![Socket.io](https://img.shields.io/badge/Socket.io-010101?style=flat-square&logo=socket.io&logoColor=white)
-
-</div>
+# Pulse
+**Real-time project management with Kanban boards**
 
 ---
 
 ## What is Pulse?
 
-Pulse is a full-stack Kanban board application for managing projects and tasks. It features real-time updates, drag-and-drop task management, dark/light theme switching, and per-user project isolation.
+Pulse is a high-performance, full-stack Kanban board application designed for seamless team collaboration. It features a modern glassmorphic UI, full real-time synchronization across all tabs and users, and a mobile-first interaction model.
 
 ---
 
-## Features
+## Key Features
 
 | Feature | Description |
 |---|---|
-| **Email & Password Auth** | Register and login with email, username, and bcrypt-hashed passwords |
-| **Per-User Projects** | Each user sees only their own boards — projects are isolated by owner |
-| **Kanban Board** | Drag-and-drop tickets across To Do, In Progress, and Done columns |
-| **Real-Time Sync** | Changes appear instantly for all connected users via WebSockets |
-| **Dark / Light Theme** | One-click toggle with system preference detection — persisted in localStorage |
-| **Board Colors** | Choose from 6 gradient color themes per board |
-| **Collapsible Sidebar** | Shrink to icon-only mode, star your favorite boards |
-| **Responsive Design** | Works on desktop, tablet, and mobile screens |
-| **Super User Mode** | Password-protected admin mode showing ticket author attribution |
+| **Real-Time Global Sync** | Project creations, deletions, and task movements reflect instantly across all sessions via user-specific WebSocket rooms. |
+| **Mobile-First UX** | Optimized for touch: Native-scrolling board with an intuitive "Quick-Move" menu on task cards (replaces complex drag-and-drop on mobile). |
+| **Desktop Drag-and-Drop** | Desktop users enjoy a fluid dragging experience powered by `@dnd-kit`. |
+| **Smart Auth** | Secure Register/Login flow with JWT expiration and persistence; each user manages their own private workspace. |
+| **Glassmorphic UI** | Premium dark-themed aesthetic with vibrant gradients, blurred backdrops, and interactive micro-animations. |
+| **Board Customization** | 8 unique gradient color themes per board, Starred projects for quick access, and a collapsible sidebar. |
 
 ---
 
 ## Tech Stack
 
-**Frontend** — Next.js · TypeScript · Zustand · @dnd-kit · Socket.io Client · Axios
+**Frontend** — Next.js 14 · TypeScript · Zustand (State) · Lucide Icons · Socket.io Client
 
-**Backend** — NestJS · Prisma ORM · JWT · Passport.js · bcrypt · Socket.io
+**Backend** — NestJS · Prisma ORM (PostgreSQL) · JWT Auth · Passport · Socket.io Gateway
 
-**Database** — PostgreSQL (Supabase)
-
-**Deployment** — Netlify (frontend) · Railway (backend)
+**Design** — Modern CSS with Glassmorphism and Responsive Mesh Gradients
 
 ---
 
 ## Getting Started
 
+### 1. Prerequisites
+- Node.js (v18+)
+- PostgreSQL Database (Supabase recommended)
+
+### 2. Installation
 ```bash
-# 1. Clone the repo
+# Clone the repository
 git clone https://github.com/sharmaasahill/pulse.git && cd pulse
 
-# 2. Start the backend
-cd backend && npm install && cp .env.example .env
-# Edit .env with your DATABASE_URL, JWT_SECRET, and SUPER_PASSWORD
+# Setup Backend
+cd backend && npm install
+# Create .env and add DATABASE_URL & JWT_SECRET
 npm run start:dev
 
-# 3. Start the frontend (new terminal)
-cd frontend && npm install && cp .env.example .env.local
-# Edit .env.local with your API URL
+# Setup Frontend
+cd frontend && npm install
+# Create .env.local and add NEXT_PUBLIC_API_URL
 npm run dev
 ```
 
-### Environment Variables
+### 3. Environment Variables
 
 **`backend/.env`**
 ```env
-DATABASE_URL="postgresql://..."      # Supabase PostgreSQL connection string
-JWT_SECRET="your-jwt-secret"
-SUPER_PASSWORD="your-admin-password"
+DATABASE_URL="postgresql://..."
+JWT_SECRET="your-secret-key"
 ```
 
 **`frontend/.env.local`**
@@ -84,66 +69,27 @@ NEXT_PUBLIC_API_URL="http://localhost:3001"
 
 ---
 
-## Project Structure
+## Project Architecture
 
 ```
 pulse/
 ├── backend/
 │   ├── src/
-│   │   ├── auth/           # JWT authentication (register/login)
-│   │   ├── projects/       # Project CRUD (user-scoped)
-│   │   ├── tickets/        # Ticket management
-│   │   ├── realtime/       # WebSocket gateway
-│   │   ├── notifications/  # In-app notifications
-│   │   ├── activities/     # Activity logging
-│   │   ├── admin/          # Super user controls
-│   │   └── prisma/         # Database service
-│   └── server/prisma/      # Schema & migrations
+│   │   ├── auth/          # Secure registration & login
+│   │   ├── projects/      # Workspace & membership logic
+│   │   ├── tickets/       # Task management & status routing
+│   │   └── realtime/      # User-specific WebSocket gateways
 └── frontend/
     └── src/
-        ├── app/            # Next.js App Router pages
-        │   ├── components/ # Navbar, Sidebar, LoginModal, ThemeInitializer
-        │   └── projects/   # Dashboard & Kanban board pages
-        ├── lib/            # API client & Socket.io setup
-        └── store/          # Zustand stores (auth, theme, UI)
+        ├── app/           # App Router, Layouts & Components
+        ├── lib/           # Socket.io & API client wrappers
+        └── store/         # Zustand persisted auth store
 ```
-
----
-
-## API Endpoints
-
-```
-POST /auth/register           → Create account
-POST /auth/login              → Login → JWT token
-
-GET    /projects              → List user's projects
-POST   /projects              → Create project
-GET    /projects/:id          → Get project with tickets
-PATCH  /projects/:id          → Update project
-DELETE /projects/:id          → Delete project
-
-POST   /tickets               → Create ticket
-PATCH  /tickets/:id           → Update ticket (title, status, etc.)
-DELETE /tickets/:id           → Delete ticket
-
-GET    /activities/:projectId → Activity feed
-POST   /admin/super-verify    → Unlock super user mode
-```
-
----
-
-## Deployment
-
-| Layer | Platform | Config |
-|---|---|---|
-| Frontend | **Netlify** | Auto-deploys from `master`, build: `npm run build` |
-| Backend | **Railway** | Root dir: `backend`, start: `npm run start:prod` |
-| Database | **Supabase** | PostgreSQL with Prisma ORM |
 
 ---
 
 <div align="center">
 
-Made by **[Sahil Sharma](https://github.com/sharmaasahill)**
+Made with ❤️ by **[Sahil Sharma](https://github.com/sharmaasahill)**
 
 </div>

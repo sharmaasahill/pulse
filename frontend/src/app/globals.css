@@ -750,6 +750,62 @@ body {
    GLOBAL RESPONSIVE LAYOUT
    ═══════════════════════════════════════════════════ */
 
+.nav-inner {
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 0 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.kanban-page-wrapper {
+  padding: 24px 32px 48px;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.kanban-board {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.project-header-section {
+  padding: 20px 32px;
+}
+
+.project-header-row {
+  max-width: 1440px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.project-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.search-input-wrapper {
+  position: relative;
+}
+
+.project-filter-bar {
+  padding: 12px 32px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+
 /* Tablet ≤ 1024px: collapse sidebar by default */
 @media (max-width: 1024px) {
   .stats-grid {
@@ -779,9 +835,53 @@ body {
     grid-template-columns: 1fr 1fr;
     gap: 10px;
   }
+  
+  .mobile-move-actions {
+    display: flex !important;
+  }
   /* Navbar padding on mobile */
-  nav .nav-inner {
-    padding: 0 12px;
+  .nav-inner {
+    padding: 0 16px 0 68px !important; /* provides a comfortable 20px gap from the hamburger menu */
+  }
+  
+  /* Kanban Board overrides */
+  .project-header-section {
+    padding: 16px 16px 12px !important;
+  }
+  .project-header-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .project-header-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .search-input-wrapper {
+    flex: 1;
+  }
+  .search-input-wrapper input {
+    width: 100% !important;
+  }
+  
+  .project-filter-bar {
+    padding: 12px 16px !important;
+  }
+  .kanban-page-wrapper {
+    padding: 16px 16px 48px !important;
+  }
+  .kanban-board {
+    display: flex !important;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    padding-bottom: 24px !important;
+    margin: 0 -16px !important; /* Bleed to edges on mobile */
+    padding: 0 16px 24px !important;
+  }
+  .kanban-board > div {
+    min-width: 85vw;
+    scroll-snap-align: center;
+    flex-shrink: 0;
   }
 }
 

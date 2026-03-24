@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { api, setAuthToken } from '@/lib/api';
 
 type UserData = {
+  id: string;
   email: string;
   username: string;
   name: string;
@@ -39,6 +40,16 @@ export const useAuth = create<AuthState>()(
     {
       name: 'auth-storage',
       partialize: (state) => ({ token: state.token, user: state.user }),
+      // ← THIS is the key fix.
+      // onRehydrateStorage fires the instant zustand-persist reads the token
+      // from localStorage and restores it into the store.
+      // We call setAuthToken here so the axios header is set BEFORE any
+      // component's useEffect/useCallback can fire an API request.
+      onRehydrateStorage: () => (state) => {
+        if (state?.token) {
+          setAuthToken(state.token);
+        }
+      },
     }
   )
 );

@@ -1,9 +1,10 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/store/useAuth";
 import { api, setAuthToken } from "@/lib/api";
+import { getSocket, joinProject } from "@/lib/socket";
 import {
   LayoutDashboard, ChevronLeft, Star, Hash, Plus, Menu, X,
 } from "lucide-react";
@@ -13,7 +14,7 @@ type SidebarProps = { onCreateBoard?: () => void; };
 
 export function Sidebar({ onCreateBoard }: SidebarProps) {
   const pathname = usePathname();
-  const { token } = useAuth();
+  const { user, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -34,15 +35,43 @@ export function Sidebar({ onCreateBoard }: SidebarProps) {
   useEffect(() => { setMobileOpen(false); }, [pathname]);
 
   const loadProjects = useCallback(async () => {
-    if (!token) return;
+    // Always read the freshest token — avoids reactive state race conditions
+    const authToken =
+      useAuth.getState().token ??
+      (() => {
+        try {
+          const raw = localStorage.getItem("auth-storage");
+          return raw ? (JSON.parse(raw)?.state?.token ?? null) : null;
+        } catch { return null; }
+      })();
+
+    if (!authToken) return;
     try {
-      setAuthToken(token);
+      setAuthToken(authToken);
       const { data } = await api.get("/projects");
       setProjects(data);
-    } catch { /* ignore */ }
-  }, [token]);
+    } catch { /* ignore sidebar errors silently */ }
+  }, []); // stable ref — no reactive deps
 
   useEffect(() => { loadProjects(); }, [loadProjects]);
+
+  // Real-time synchronization
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const socket = getSocket();
+    joinProject(undefined as any, user.id);
+
+    const handleUpdate = () => {
+      loadProjects();
+    };
+
+    socket.on("project:updated", handleUpdate);
+
+    return () => {
+      socket.off("project:updated", handleUpdate);
+    };
+  }, [user?.id, loadProjects]);
 
   useEffect(() => {
     try {
@@ -59,9 +88,16 @@ export function Sidebar({ onCreateBoard }: SidebarProps) {
     });
   }
 
+  const router = useRouter();
+
   function handleCreateBoard() {
-    if (onCreateBoard) onCreateBoard();
-    else window.dispatchEvent(new CustomEvent("pulse:create-board"));
+    if (pathname === "/projects") {
+      if (onCreateBoard) onCreateBoard();
+      else window.dispatchEvent(new CustomEvent("pulse:create-board"));
+    } else {
+      localStorage.setItem("pulse:create-board-pending", "true");
+      router.push("/projects");
+    }
     setMobileOpen(false);
   }
 
@@ -114,7 +150,7 @@ export function Sidebar({ onCreateBoard }: SidebarProps) {
         </div>
 
         {/* Create Board button */}
-        <div style={{ padding: isCollapsed ? "12px 8px" : "12px", borderTop: "1px solid var(--border-primary)" }}>
+        <div style={{ padding: isCollapsed ? "12px 8px 32px" : "12px 12px 32px", borderTop: "1px solid var(--border-primary)" }}>
           <button onClick={handleCreateBoard}
             style={{
               width: "100%", display: "flex", alignItems: "center",

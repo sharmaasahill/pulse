@@ -21,28 +21,40 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server.to(`project:${projectId}`).emit('ticket:updated', payload);
   }
 
+  emitToUser(userId: string, event: string, payload: unknown) {
+    this.server.to(`user:${userId}`).emit(event, payload);
+  }
+
   @SubscribeMessage('join')
-  handleJoin(client: Socket, data: { projectId: string; userId?: string }) {
+  handleJoin(client: Socket, data: { projectId?: string; userId?: string }) {
     try {
-      const room = `project:${data.projectId}`;
-      
-      // Join the client to the room
-      client.join(room);
-      
-      // Track user connection
-      if (data.userId) {
-        this.userSockets.set(client.id, data.userId);
-        if (!this.connectedUsers.has(data.projectId)) {
-          this.connectedUsers.set(data.projectId, new Set());
+      // Join project room if provided
+      if (data.projectId) {
+        const room = `project:${data.projectId}`;
+        client.join(room);
+        
+        // Track user connection to project
+        if (data.userId) {
+          this.userSockets.set(client.id, data.userId);
+          if (!this.connectedUsers.has(data.projectId)) {
+            this.connectedUsers.set(data.projectId, new Set());
+          }
+          this.connectedUsers.get(data.projectId)!.add(data.userId);
         }
-        this.connectedUsers.get(data.projectId)!.add(data.userId);
+        console.log(`User joined project room: ${room}, userId: ${data.userId}`);
+      }
+
+      // Join user-specific room if provided
+      if (data.userId) {
+        const userRoom = `user:${data.userId}`;
+        client.join(userRoom);
+        console.log(`User joined personal room: ${userRoom}`);
       }
       
-      console.log(`User joined room: ${room}, userId: ${data.userId}`);
-      return { ok: true, room };
+      return { ok: true };
     } catch (error) {
       console.error('Error in handleJoin:', error);
-      return { ok: false, error: error.message };
+      return { ok: false, error: (error as Error).message };
     }
   }
 

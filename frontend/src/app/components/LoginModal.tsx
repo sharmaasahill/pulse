@@ -66,6 +66,9 @@ export function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
         await login({ email, password });
       }
       onSuccess();
+      // Wait one tick for zustand-persist to flush the token to localStorage
+      // before navigating, so all API calls on the next page have the token.
+      await new Promise(resolve => setTimeout(resolve, 50));
       router.push('/projects');
     } catch (err: any) {
       const msg = err?.response?.data?.message;

@@ -28,7 +28,7 @@ export class AuthService {
     });
 
     const jwt = await this.jwt.signAsync({ sub: user.id, email: user.email });
-    return { token: jwt, user: { email: user.email, username: user.username, name: user.name } };
+    return { token: jwt, user: { id: user.id, email: user.email, username: user.username, name: user.name } };
   }
 
   async login(data: any): Promise<{ token: string, user: any }> {
@@ -39,6 +39,6 @@ export class AuthService {
     if (!isMatch) throw new UnauthorizedException('Invalid credentials');
 
     const jwt = await this.jwt.signAsync({ sub: user.id, email: user.email });
-    return { token: jwt, user: { email: user.email, username: user.username, name: user.name } };
+    return { token: jwt, user: { id: user.id, email: user.email, username: user.username, name: user.name } };
   }
 }

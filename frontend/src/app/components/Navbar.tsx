@@ -3,12 +3,13 @@ import { useState } from "react";
 import { useAuth } from "@/store/useAuth";
 import { LoginModal } from "./LoginModal";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { LayoutDashboard, LogOut } from "lucide-react";
 
 export function Navbar() {
   const { token, logout, user } = useAuth();
   const pathname = usePathname();
+  const router = useRouter();
   const [showLoginModal, setShowLoginModal] = useState(false);
 
   const initials = user?.name
@@ -32,15 +33,7 @@ export function Navbar() {
         borderRight: 'none',
         borderRadius: 0,
       }}>
-        <div style={{
-          width: '100%',
-          maxWidth: '1600px',
-          margin: '0 auto',
-          padding: '0 20px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-        }}>
+        <div className="nav-inner">
           {/* Logo */}
           <Link href="/" style={{
             textDecoration: 'none',
@@ -114,7 +107,10 @@ export function Navbar() {
                 </div>
 
                 <button
-                  onClick={logout}
+                  onClick={() => {
+                    logout();
+                    router.push('/');
+                  }}
                   className="btn-icon"
                   title="Sign Out"
                   style={{

@@ -15,6 +15,10 @@ class CreateTicketDto {
   @IsOptional()
   @IsString()
   authorEmail?: string;
+  @IsOptional()
+  priority?: Prisma.TicketCreateInput['priority'];
+  @IsOptional()
+  status?: Prisma.TicketCreateInput['status'];
 }
 
 class UpdateTicketDto {

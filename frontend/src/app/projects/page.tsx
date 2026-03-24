@@ -1,8 +1,9 @@
 "use client";
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { api, setAuthToken } from "@/lib/api";
 import { useAuth } from "@/store/useAuth";
-import { redirect, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { getSocket, joinProject } from "@/lib/socket";
 import {
   FolderPlus, Search, Trash2, Edit2, Clock, CheckCircle2, Circle,
   AlertCircle, LayoutGrid, List, Plus, Star, TrendingUp,
@@ -99,7 +100,7 @@ function StatCard({ label, value, icon, color, sub }: { label: string; value: nu
 }
 
 export default function ProjectsPage() {
-  const { token, logout } = useAuth();
+  const { user, token, logout } = useAuth();
   const router = useRouter();
   const [items, setItems] = useState<Project[]>([]);
   const [name, setName] = useState("");
@@ -116,22 +117,56 @@ export default function ProjectsPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [starredIds, setStarredIds] = useState<string[]>([]);
 
+  // Stable ref so the init effect runs exactly once
+  const initialized = useRef(false);
+
   const loadProjects = useCallback(async () => {
     try {
       const { data } = await api.get("/projects");
       setItems(data);
-    } catch {
-      logout();
+    } catch (err: any) {
+      // Only redirect to home on a real 401 — never on network glitches
+      if (err?.response?.status === 401) {
+        logout();
+        router.push("/");
+      }
     }
-  }, [logout]);
+  }, [logout, router]);
+
+  // Real-time synchronization
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const socket = getSocket();
+    joinProject(undefined as any, user.id);
+
+    const handleUpdate = () => {
+      loadProjects();
+    };
+
+    socket.on("project:updated", handleUpdate);
+
+    return () => {
+      socket.off("project:updated", handleUpdate);
+    };
+  }, [user?.id, loadProjects]);
 
   useEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
+
+    // Get token — either already hydrated in store, or from localStorage
     const stored = localStorage.getItem("auth-storage");
-    let parsedToken = null;
-    try { if (stored) parsedToken = JSON.parse(stored).state?.token; } catch { /* ignore */ }
-    if (!token && !parsedToken) { setAuthLoading(false); redirect("/"); return; }
-    const authToken = token || parsedToken;
-    if (authToken) { setAuthToken(authToken); loadProjects(); setAuthLoading(false); }
+    let parsedToken: string | null = null;
+    try { if (stored) parsedToken = JSON.parse(stored)?.state?.token ?? null; } catch { /* ignore */ }
+
+    const authToken = useAuth.getState().token ?? parsedToken;
+    if (!authToken) { setAuthLoading(false); router.push("/"); return; }
+
+    setAuthToken(authToken);
+    loadProjects();
+    setAuthLoading(false);
+
     try {
       const s = localStorage.getItem("pulse-starred");
       if (s) setStarredIds(JSON.parse(s));
@@ -141,9 +176,17 @@ export default function ProjectsPage() {
     function onCreateBoardEvent() {
       setName(""); setDescription(""); setSelectedColor("orange"); setShowCreateModal(true);
     }
+
+    // Check for pending creation from other pages
+    if (localStorage.getItem("pulse:create-board-pending") === "true") {
+      localStorage.removeItem("pulse:create-board-pending");
+      onCreateBoardEvent();
+    }
+
     window.addEventListener("pulse:create-board", onCreateBoardEvent);
     return () => window.removeEventListener("pulse:create-board", onCreateBoardEvent);
-  }, [token, logout, loadProjects]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function toggleStar(projectId: string) {
     setStarredIds(prev => {

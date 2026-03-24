@@ -23,7 +23,7 @@ export class NotificationsService {
       }
 
       // Get currently connected users in this project
-      const connectedUsers = this.getConnectedUsers(projectId);
+      const connectedUsers = this.gateway.getConnectedUsers(projectId);
       console.log(`Connected users in project ${projectId}:`, connectedUsers);
 
       // Find offline members (those not currently connected)
@@ -42,20 +42,5 @@ export class NotificationsService {
     } catch (error) {
       console.error('Failed to parse notifications:', error);
     }
-  }
-
-  private getConnectedUsers(projectId: string): string[] {
-    // Get all sockets in the project room
-    const room = `project:${projectId}`;
-    const sockets = this.gateway.server.sockets.adapter.rooms.get(room);
-    
-    if (!sockets) {
-      return [];
-    }
-
-    // For now, we'll return empty array since we don't have user ID tracking
-    // In a real implementation, you'd store user IDs when they connect
-    // and map socket IDs to user IDs
-    return [];
   }
 }

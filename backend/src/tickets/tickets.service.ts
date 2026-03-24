@@ -17,7 +17,7 @@ export class TicketsService {
     return this.prisma.ticket.findUnique({ where: { id } });
   }
 
-  async create(input: { projectId: string; title: string; description?: string; authorId?: string; authorEmail?: string }) {
+  async create(input: { projectId: string; title: string; description?: string; authorId?: string; authorEmail?: string; priority?: any; status?: any }) {
     // Find or create user for the author
     let authorId = input.authorId;
     if (!authorId && input.authorEmail) {
@@ -48,7 +48,9 @@ export class TicketsService {
         projectId: input.projectId,
         title: input.title,
         description: input.description,
-        authorId: authorId
+        authorId: authorId,
+        priority: input.priority,
+        status: input.status
       } 
     });
     this.gateway.emitTicketUpdated(ticket.projectId, { type: 'created', ticket });
