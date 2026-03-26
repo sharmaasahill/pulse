@@ -7,7 +7,7 @@ import { getSocket, joinProject } from "@/lib/socket";
 import {
   FolderPlus, Search, Trash2, Edit2, Clock, CheckCircle2, Circle,
   AlertCircle, LayoutGrid, List, Plus, Star, TrendingUp,
-  Zap, ChevronRight, ArrowRight, Activity, Target, Layers, X
+  Zap, ChevronRight, ArrowRight, Activity, Target, Layers, X, Users
 } from "lucide-react";
 
 type Project = {
@@ -17,6 +17,7 @@ type Project = {
   createdAt: string;
   updatedAt?: string;
   tickets?: Array<{ id: string; status: string; priority?: string }>;
+  members?: Array<{ userId: string; role: string }>;
 };
 
 type SortOption = "name" | "date" | "tickets" | "recent";
@@ -451,14 +452,14 @@ export default function ProjectsPage() {
                   <Star size={11} fill="currentColor" />Starred
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 14 }}>
-                  {starred.map((p, i) => <ProjectCard key={p.id} project={p} index={i} starred router={router} openEditModal={openEditModal} setShowDeleteModal={setShowDeleteModal} starredIds={starredIds} toggleStar={toggleStar} />)}
+                  {starred.map((p, i) => <ProjectCard key={p.id} project={p} index={i} starred userId={user?.id} router={router} openEditModal={openEditModal} setShowDeleteModal={setShowDeleteModal} starredIds={starredIds} toggleStar={toggleStar} />)}
                 </div>
               </div>
             )}
             {/* ─── All Projects ─── */}
             {(starred.length > 0 && unstarred.length > 0) && <div className="section-label">All Projects</div>}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 14 }}>
-              {unstarred.map((p, i) => <ProjectCard key={p.id} project={p} index={i} starred={false} router={router} openEditModal={openEditModal} setShowDeleteModal={setShowDeleteModal} starredIds={starredIds} toggleStar={toggleStar} />)}
+              {unstarred.map((p, i) => <ProjectCard key={p.id} project={p} index={i} starred={false} userId={user?.id} router={router} openEditModal={openEditModal} setShowDeleteModal={setShowDeleteModal} starredIds={starredIds} toggleStar={toggleStar} />)}
             </div>
           </>
         ) : (
@@ -477,6 +478,9 @@ export default function ProjectsPage() {
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                     <div style={{ width: 10, height: 36, borderRadius: 5, background: getBoardColor(project.id), flexShrink: 0 }} />
                     <span style={{ fontWeight: 700, fontSize: 14, color: "#fff" }}>{project.name}</span>
+                    {project.members && project.members.find(m => m.userId === user?.id)?.role !== "OWNER" && (
+                      <span style={{ fontSize: 10, fontWeight: 800, color: "#f59e0b", background: "rgba(245,158,11,0.15)", padding: "2px 6px", borderRadius: 4 }}>SHARED</span>
+                    )}
                     {starredIds.includes(project.id) && <Star size={12} fill="#f59e0b" color="#f59e0b" />}
                   </div>
                   <span style={{ fontSize: 13, color: "rgba(255,255,255,0.4)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 16 }}>{project.description || "—"}</span>
@@ -593,8 +597,8 @@ export default function ProjectsPage() {
 }
 
 /* ══════════ PROJECT CARD ══════════ */
-function ProjectCard({ project, index, starred, router, openEditModal, setShowDeleteModal, starredIds, toggleStar }: {
-  project: Project; index: number; starred: boolean;
+function ProjectCard({ project, index, starred, userId, router, openEditModal, setShowDeleteModal, starredIds, toggleStar }: {
+  project: Project; index: number; starred: boolean; userId?: string;
   router: ReturnType<typeof useRouter>;
   openEditModal: (p: Project) => void;
   setShowDeleteModal: (v: { id: string; name: string } | null) => void;
@@ -620,18 +624,22 @@ function ProjectCard({ project, index, starred, router, openEditModal, setShowDe
       {/* Cover */}
       <div style={{ height: 80, background: gradient, position: "relative" }}>
         <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.2)" }} />
-        {/* Actions */}
-        <div className="proj-actions" style={{ position: "absolute", top: 10, right: 10, display: "flex", gap: 6, opacity: 0, transition: "opacity 0.2s" }} onClick={e => e.stopPropagation()}>
-          <button onClick={() => toggleStar(project.id)} style={{ background: "rgba(0,0,0,0.4)", border: "none", borderRadius: 8, padding: "5px 6px", cursor: "pointer", display: "flex" }}>
-            <Star size={13} fill={isStarred ? "#f59e0b" : "none"} color={isStarred ? "#f59e0b" : "#fff"} />
-          </button>
-          <button onClick={() => openEditModal(project)} style={{ background: "rgba(0,0,0,0.4)", border: "none", borderRadius: 8, padding: "5px 6px", color: "#fff", cursor: "pointer", display: "flex" }}>
-            <Edit2 size={13} />
-          </button>
-          <button onClick={() => setShowDeleteModal({ id: project.id, name: project.name })} style={{ background: "rgba(239,68,68,0.6)", border: "none", borderRadius: 8, padding: "5px 6px", color: "#fff", cursor: "pointer", display: "flex" }}>
-            <Trash2 size={13} />
-          </button>
-        </div>
+        {/* Actions - Only show edit/delete if owner or editor */}
+        {(!project.members || project.members.find(m => m.userId === userId)?.role === "OWNER" || project.members.find(m => m.userId === userId)?.role === "EDITOR") && (
+          <div className="proj-actions" style={{ position: "absolute", top: 10, right: 10, display: "flex", gap: 6, opacity: 0, transition: "opacity 0.2s" }} onClick={e => e.stopPropagation()}>
+            <button onClick={() => toggleStar(project.id)} style={{ background: "rgba(0,0,0,0.4)", border: "none", borderRadius: 8, padding: "5px 6px", cursor: "pointer", display: "flex" }}>
+              <Star size={13} fill={isStarred ? "#f59e0b" : "none"} color={isStarred ? "#f59e0b" : "#fff"} />
+            </button>
+            <button onClick={() => openEditModal(project)} style={{ background: "rgba(0,0,0,0.4)", border: "none", borderRadius: 8, padding: "5px 6px", color: "#fff", cursor: "pointer", display: "flex" }}>
+              <Edit2 size={13} />
+            </button>
+            {(!project.members || project.members.find(m => m.userId === userId)?.role === "OWNER") && (
+              <button onClick={() => setShowDeleteModal({ id: project.id, name: project.name })} style={{ background: "rgba(239,68,68,0.6)", border: "none", borderRadius: 8, padding: "5px 6px", color: "#fff", cursor: "pointer", display: "flex" }}>
+                <Trash2 size={13} />
+              </button>
+            )}
+          </div>
+        )}
         {isStarred && (
           <div style={{ position: "absolute", top: 10, left: 10 }}>
             <Star size={14} fill="#f59e0b" color="#f59e0b" />
@@ -643,7 +651,12 @@ function ProjectCard({ project, index, starred, router, openEditModal, setShowDe
       <div style={{ padding: "18px 20px" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 10 }}>
           <div>
-            <h3 style={{ fontSize: 16, fontWeight: 800, margin: "0 0 4px", color: "#fff", lineHeight: 1.3, letterSpacing: "-0.01em" }}>{project.name}</h3>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 4px" }}>
+              <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: "#fff", lineHeight: 1.3, letterSpacing: "-0.01em" }}>{project.name}</h3>
+              {project.members && project.members.find(m => m.userId === userId)?.role !== "OWNER" && (
+                <span style={{ fontSize: 10, fontWeight: 800, color: "#f59e0b", background: "rgba(245,158,11,0.15)", padding: "2px 6px", borderRadius: 4 }}>SHARED</span>
+              )}
+            </div>
             <p style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
               {project.description || "No description"}
             </p>
@@ -651,8 +664,13 @@ function ProjectCard({ project, index, starred, router, openEditModal, setShowDe
           <ProgressRing progress={progress} size={48} stroke={4} />
         </div>
 
-        {/* Task pills */}
+        {/* Task & Member pills */}
         <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+          {project.members && project.members.length > 1 && (
+            <span style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.7)", background: "rgba(255,255,255,0.1)", padding: "3px 8px", borderRadius: 6, display: "flex", alignItems: "center", gap: 4 }}>
+              <Users size={12} /> {project.members.length}
+            </span>
+          )}
           {tickets.filter(t => t.status === "TODO").length > 0 && (
             <span style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.5)", background: "rgba(255,255,255,0.07)", padding: "3px 8px", borderRadius: 6 }}>
               {tickets.filter(t => t.status === "TODO").length} todo

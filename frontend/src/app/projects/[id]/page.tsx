@@ -5,6 +5,9 @@ import { getSocket, joinProject } from "@/lib/socket";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/store/useAuth";
 import { Notifications } from "./notifications";
+import { ShareModal } from "@/app/components/ShareModal";
+import { MembersPanel } from "@/app/components/MembersPanel";
+import { CommentsSection } from "@/app/components/CommentsSection";
 import { 
   DndContext, DragOverlay, closestCorners, MouseSensor, 
   useSensor, useSensors, DragStartEvent, DragEndEvent, useDroppable
@@ -19,14 +22,18 @@ import {
   Clock, Zap, Circle, GripVertical, Flag, ChevronRight, Activity
 } from "lucide-react";
 
-interface Project { id: string; name: string; tickets?: Ticket[]; }
 interface Ticket {
   id: string; title: string; authorId?: string;
-  author?: { id: string; email: string };
+  author?: { id: string; email: string; name?: string; username?: string };
   status: "TODO" | "IN_PROGRESS" | "DONE";
   description?: string;
   priority?: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
 }
+interface Member {
+  userId: string;
+  role: "OWNER" | "EDITOR" | "VIEWER";
+}
+interface Project { id: string; name: string; tickets?: Ticket[]; members?: Member[] }
 
 type Priority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
 
@@ -117,10 +124,10 @@ function DraggableTicket({ ticket, onEdit, onDelete, onMove }: {
       {ticket.author?.email && (
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
           <div style={{ width: 20, height: 20, borderRadius: "50%", background: "linear-gradient(135deg,#f97316,#ea580c)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 800, color: "#fff", flexShrink: 0 }}>
-            {ticket.author.email[0].toUpperCase()}
+            {(ticket.author.name || ticket.author.username || ticket.author.email).charAt(0).toUpperCase()}
           </div>
           <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 140 }}>
-            {ticket.author.email.split("@")[0]}
+            {ticket.author.name || ticket.author.username || ticket.author.email.split("@")[0]}
           </span>
         </div>
       )}
@@ -145,10 +152,12 @@ function DraggableTicket({ ticket, onEdit, onDelete, onMove }: {
 }
 
 /* ─── Column Quick Add ─── */
-function QuickAdd({ status, projectId, userEmail, onAdded }: { status: string; projectId: string; userEmail: string; onAdded: () => void }) {
+function QuickAdd({ status, projectId, userEmail, onAdded, canEdit }: { status: string; projectId: string; userEmail: string; onAdded: () => void; canEdit: boolean }) {
   const [open, setOpen] = useState(false);
   const [val, setVal] = useState("");
   const [loading, setLoading] = useState(false);
+
+  if (!canEdit) return null;
 
   async function submit() {
     if (!val.trim()) return;
@@ -202,11 +211,12 @@ function QuickAdd({ status, projectId, userEmail, onAdded }: { status: string; p
 }
 
 /* ─── Droppable Column ─── */
-function KanbanColumn({ id, tickets, onEdit, onDelete, projectId, userEmail, onAdded, onMove }: {
+function KanbanColumn({ id, tickets, onEdit, onDelete, projectId, userEmail, onAdded, onMove, canEdit }: {
   id: "TODO" | "IN_PROGRESS" | "DONE"; tickets: Ticket[];
   onEdit: (t: Ticket) => void; onDelete: (t: Ticket) => void;
   onMove: (id: string, st: "TODO" | "IN_PROGRESS" | "DONE") => void;
   projectId: string; userEmail: string; onAdded: () => void;
+  canEdit: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   const meta = COL_META[id];
@@ -215,7 +225,8 @@ function KanbanColumn({ id, tickets, onEdit, onDelete, projectId, userEmail, onA
     <div style={{
       background: isOver ? "rgba(249,115,22,0.05)" : "rgba(255,255,255,0.02)",
       border: `1px solid ${isOver ? meta.borderColor : "rgba(255,255,255,0.06)"}`,
-      borderRadius: 18, padding: 16, display: "flex", flexDirection: "column", minHeight: 480,
+      borderRadius: 18, padding: "16px 12px 16px 16px", display: "flex", flexDirection: "column",
+      height: "calc(100vh - 220px)", minHeight: 480,
       transition: "all 0.2s",
       boxShadow: isOver ? `0 0 20px ${meta.glow}` : "none",
     }} ref={setNodeRef}>
@@ -235,10 +246,10 @@ function KanbanColumn({ id, tickets, onEdit, onDelete, projectId, userEmail, onA
       <div style={{ height: 2, background: meta.color, borderRadius: 2, marginBottom: 14, opacity: 0.4 }} />
 
       {/* Tickets */}
-      <div style={{ flex: 1 }}>
+      <div style={{ flex: 1, overflowY: "auto", paddingRight: 4, display: "flex", flexDirection: "column", gap: 10 }}>
         <SortableContext items={tickets.map(t => t.id)} strategy={verticalListSortingStrategy}>
           {tickets.map(t => (
-            <DraggableTicket key={t.id} ticket={t} onEdit={onEdit} onDelete={onDelete} onMove={onMove} />
+            <DraggableTicket key={t.id} ticket={t} onEdit={canEdit ? onEdit : () => {}} onDelete={canEdit ? onDelete : () => {}} onMove={canEdit ? onMove : () => {}} />
           ))}
         </SortableContext>
         {tickets.length === 0 && !isOver && (
@@ -250,7 +261,9 @@ function KanbanColumn({ id, tickets, onEdit, onDelete, projectId, userEmail, onA
       </div>
 
       {/* Quick add */}
-      <QuickAdd status={id} projectId={projectId} userEmail={userEmail} onAdded={onAdded} />
+      <div style={{ marginTop: 14, paddingRight: 4 }}>
+        <QuickAdd status={id} projectId={projectId} userEmail={userEmail} onAdded={onAdded} canEdit={canEdit} />
+      </div>
     </div>
   );
 }
@@ -270,6 +283,8 @@ export default function ProjectDetailPage() {
   const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState<Ticket | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [showMembersPanel, setShowMembersPanel] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterPriority, setFilterPriority] = useState<Priority | "ALL">("ALL");
 
@@ -409,6 +424,8 @@ export default function ProjectDetailPage() {
   }
 
   const activeTicket = project.tickets?.find(t => t.id === activeId);
+  const userRole = project.members?.find(m => m.userId === user?.id)?.role || "VIEWER";
+  const canEdit = userRole === "OWNER" || userRole === "EDITOR";
 
   return (
     <div style={{ minHeight: "100vh", background: "#111111", color: "#fff", fontFamily: "Inter, -apple-system, sans-serif" }}>
@@ -471,16 +488,47 @@ export default function ProjectDetailPage() {
           </div>
 
           {/* Header right */}
-          <div className="project-header-right">
+          <div className="project-header-right" style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginRight: 8 }}>
+              {project.members && (
+                <button onClick={() => setShowMembersPanel(true)} style={{
+                  background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: 20, padding: "6px 14px", display: "flex", alignItems: "center", gap: 8,
+                  color: "rgba(255,255,255,0.8)", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                }}>
+                  <div style={{ display: "flex", marginLeft: 4 }}>
+                    {project.members.slice(0, 3).map((m, i) => (
+                      <div key={m.userId} style={{
+                        width: 20, height: 20, borderRadius: "50%", background: "var(--accent-gradient)",
+                        border: "2px solid #111", marginLeft: -8, zIndex: 3 - i,
+                      }} />
+                    ))}
+                  </div>
+                  {project.members.length} members
+                </button>
+              )}
+              {userRole === "OWNER" && (
+                <button onClick={() => setShowShareModal(true)} style={{
+                  background: "var(--accent-primary-soft)", border: "1px solid var(--accent-primary)",
+                  borderRadius: 20, padding: "6px 14px", display: "flex", alignItems: "center", gap: 6,
+                  color: "var(--accent-primary)", fontSize: 13, fontWeight: 700, cursor: "pointer",
+                }}>
+                  Share
+                </button>
+              )}
+            </div>
+
             {/* Search */}
-            <div className="search-input-wrapper">
-              <Search size={14} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.3)" }} />
+            <div className="search-input-wrapper" style={{ position: "relative" }}>
+              <Search size={14} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.3)", pointerEvents: "none" }} />
               <input placeholder="Search tasks…" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
                 style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: 10, padding: "8px 12px 8px 32px", color: "#fff", fontSize: 13, outline: "none", width: 220, fontFamily: "inherit" }} />
             </div>
-            <button className="btn-orange-sm" style={{ flexShrink: 0 }} onClick={() => { setTitle(""); setDescription(""); setPriority("MEDIUM"); setEditingTicket(null); setShowCreateModal(true); }}>
-              <Plus size={15} /> Add Task
-            </button>
+            {canEdit && (
+              <button className="btn-orange-sm" style={{ flexShrink: 0 }} onClick={() => { setTitle(""); setDescription(""); setPriority("MEDIUM"); setEditingTicket(null); setShowCreateModal(true); }}>
+                <Plus size={15} /> Add Task
+              </button>
+            )}
           </div>
         </div>
 
@@ -516,8 +564,8 @@ export default function ProjectDetailPage() {
           <div className="kanban-board">
             {(["TODO", "IN_PROGRESS", "DONE"] as const).map(status => (
               <KanbanColumn key={status} id={status} tickets={filter(project.tickets ?? [], status)}
-                onEdit={openEditModal} onDelete={t => setShowDeleteModal(t)} onMove={moveTicket}
-                projectId={projectId} userEmail={user?.email || ""} onAdded={reloadProject} />
+                onEdit={canEdit ? openEditModal : () => {}} onDelete={t => { if(canEdit) setShowDeleteModal(t); }} onMove={(t, s) => { if(canEdit) moveTicket(t, s); }}
+                projectId={projectId} userEmail={user?.email || ""} onAdded={reloadProject} canEdit={canEdit} />
             ))}
           </div>
 
@@ -589,6 +637,11 @@ export default function ProjectDetailPage() {
               </div>
             </div>
 
+            {/* Comments rendered inside the task modal when editing */}
+            {editingTicket && (
+              <CommentsSection ticketId={editingTicket.id} projectId={projectId} />
+            )}
+
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button onClick={() => { setShowCreateModal(false); setEditingTicket(null); }} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "10px 18px", color: "rgba(255,255,255,0.7)", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
               <button className="btn-orange-sm" style={{ padding: "10px 20px", fontSize: 14 }} onClick={editingTicket ? updateTicket : createTicket} disabled={!title.trim()}>
@@ -619,6 +672,10 @@ export default function ProjectDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Modals */}
+      {showShareModal && <ShareModal projectId={projectId} projectName={project.name} onClose={() => setShowShareModal(false)} />}
+      {showMembersPanel && <MembersPanel projectId={projectId} onClose={() => setShowMembersPanel(false)} />}
     </div>
   );
 }

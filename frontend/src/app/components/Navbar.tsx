@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useAuth } from "@/store/useAuth";
 import { LoginModal } from "./LoginModal";
+import { NotificationBell } from "./NotificationBell";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LayoutDashboard, LogOut } from "lucide-react";
@@ -71,6 +72,8 @@ export function Navbar() {
                 </Link>
 
                 <div style={{ width: '1px', height: '24px', background: 'var(--border-primary)', margin: '0 8px' }} />
+
+                <NotificationBell />
 
                 {/* User badge */}
                 <div style={{

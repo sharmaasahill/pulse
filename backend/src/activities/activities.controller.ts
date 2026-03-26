@@ -1,4 +1,4 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, UseGuards, Request } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { ActivitiesService } from './activities.service';
 
@@ -6,6 +6,11 @@ import { ActivitiesService } from './activities.service';
 @Controller('activities')
 export class ActivitiesController {
   constructor(private readonly activities: ActivitiesService) {}
+
+  @Get('notifications')
+  getNotifications(@Request() req: any) {
+    return this.activities.getNotifications(req.user.id);
+  }
 
   @Get(':projectId')
   list(@Param('projectId') projectId: string) {

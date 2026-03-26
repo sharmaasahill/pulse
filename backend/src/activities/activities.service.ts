@@ -14,6 +14,31 @@ export class ActivitiesService {
       where: { projectId },
       orderBy: { createdAt: 'desc' },
       take: 50,
+      include: {
+        actor: { select: { id: true, name: true, email: true } }
+      }
+    });
+  }
+
+  async getNotifications(userId: string) {
+    const members = await this.prisma.membership.findMany({
+      where: { userId }, select: { projectId: true }
+    });
+    const projectIds = members.map(m => m.projectId);
+
+    if (!projectIds.length) return [];
+
+    return this.prisma.activity.findMany({
+      where: {
+        projectId: { in: projectIds },
+        actorId: { not: userId }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      include: {
+        actor: { select: { id: true, name: true, email: true } },
+        project: { select: { id: true, name: true } }
+      }
     });
   }
 }

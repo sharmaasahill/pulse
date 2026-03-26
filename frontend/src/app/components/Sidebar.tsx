@@ -190,11 +190,12 @@ export function Sidebar({ onCreateBoard }: SidebarProps) {
       {/* ── Mobile hamburger button ── */}
       <button className="sidebar-hamburger" onClick={() => setMobileOpen(!mobileOpen)}
         style={{
-          position: "fixed", top: 14, left: 14, zIndex: 200,
+          position: "fixed", top: "calc((var(--navbar-height) - 34px) / 2)", left: 16, zIndex: 200,
           background: "var(--bg-secondary)", border: "1px solid var(--border-primary)",
-          borderRadius: 10, padding: 7, color: "var(--text-primary)", cursor: "pointer",
+          borderRadius: 8, padding: 6, color: "var(--text-primary)", cursor: "pointer",
           alignItems: "center", justifyContent: "center",
           display: "none", // shown via CSS media query below
+          height: 34, width: 34, boxSizing: "border-box"
         }}>
         {mobileOpen ? <X size={20} /> : <Menu size={20} />}
       </button>

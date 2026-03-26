@@ -1,8 +1,4 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// Prisma Schema — Pulse Collaboration Platform
 
 generator client {
   provider = "prisma-client-js"
@@ -13,7 +9,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// --- Domain models ---
+// --- Enums ---
 
 enum TicketStatus {
   TODO
@@ -26,6 +22,14 @@ enum TicketPriority {
   MEDIUM
   HIGH
 }
+
+enum MemberRole {
+  OWNER
+  EDITOR
+  VIEWER
+}
+
+// --- Models ---
 
 model User {
   id           String   @id @default(cuid())
@@ -43,6 +47,7 @@ model User {
   activities     Activity[]
   memberships    Membership[]
   updatedTickets Ticket[]     @relation("UpdatedByTickets")
+  comments       Comment[]    @relation("AuthorComments")
 }
 
 model Project {
@@ -58,20 +63,38 @@ model Project {
   tickets    Ticket[]
   activities Activity[]
   members    Membership[]
+  invites    Invite[]
 
   @@index([ownerId])
 }
 
 model Membership {
-  id        String @id @default(cuid())
+  id        String     @id @default(cuid())
   userId    String
   projectId String
-  role      String @default("member")
+  role      MemberRole @default(EDITOR)
+  joinedAt  DateTime   @default(now())
 
   user    User    @relation(fields: [userId], references: [id])
-  project Project @relation(fields: [projectId], references: [id])
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([userId, projectId])
+  @@index([projectId])
+}
+
+model Invite {
+  id        String     @id @default(cuid())
+  projectId String
+  token     String     @unique @default(uuid())
+  code      String     @unique
+  role      MemberRole @default(EDITOR)
+  enabled   Boolean    @default(true)
+  expiresAt DateTime?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
   @@index([projectId])
 }
 
@@ -87,13 +110,28 @@ model Ticket {
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
-  project    Project    @relation(fields: [projectId], references: [id])
+  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   author     User       @relation("AuthorTickets", fields: [authorId], references: [id])
   updatedBy  User?      @relation("UpdatedByTickets", fields: [updatedById], references: [id])
   activities Activity[]
+  comments   Comment[]
 
   @@index([projectId])
   @@index([authorId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  ticketId  String
+  authorId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User   @relation("AuthorComments", fields: [authorId], references: [id])
+
+  @@index([ticketId])
 }
 
 model Activity {
@@ -105,8 +143,8 @@ model Activity {
   actorId   String
   createdAt DateTime @default(now())
 
-  project Project @relation(fields: [projectId], references: [id])
-  ticket  Ticket? @relation(fields: [ticketId], references: [id])
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  ticket  Ticket? @relation(fields: [ticketId], references: [id], onDelete: SetNull)
   actor   User    @relation(fields: [actorId], references: [id])
 
   @@index([projectId])

@@ -11,6 +11,9 @@ import { ActivitiesModule } from './activities/activities.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
+import { InvitesModule } from './invites/invites.module';
+import { MembersModule } from './members/members.module';
+import { CommentsModule } from './comments/comments.module';
 
 @Module({
   imports: [
@@ -24,8 +27,12 @@ import { AdminModule } from './admin/admin.module';
     RealtimeModule,
     NotificationsModule,
     AdminModule,
+    InvitesModule,
+    MembersModule,
+    CommentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
 export class AppModule {}
+

@@ -9,11 +9,22 @@ export class ProjectsService {
     private readonly gateway: AppGateway,
   ) {}
 
+  // List all projects where the user is a member (owned + shared)
   list(userId: string) {
     return this.prisma.project.findMany({
-      where: { ownerId: userId },
-      orderBy: { createdAt: 'desc' },
-      include: { tickets: true },
+      where: {
+        members: { some: { userId } },
+      },
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        tickets: true,
+        members: {
+          include: {
+            user: { select: { id: true, email: true, username: true, name: true } },
+          },
+        },
+        owner: { select: { id: true, email: true, username: true, name: true } },
+      },
     });
   }
 
@@ -26,9 +37,9 @@ export class ProjectsService {
         members: {
           create: {
             userId: input.ownerId,
-            role: 'owner'
-          }
-        }
+            role: 'OWNER',
+          },
+        },
       },
     });
 
@@ -39,12 +50,17 @@ export class ProjectsService {
   getById(id: string) {
     return this.prisma.project.findUnique({
       where: { id },
-      include: { 
+      include: {
         tickets: {
+          include: { author: true },
+          orderBy: { createdAt: 'desc' },
+        },
+        members: {
           include: {
-            author: true
-          }
-        }
+            user: { select: { id: true, email: true, username: true, name: true } },
+          },
+        },
+        owner: { select: { id: true, email: true, username: true, name: true } },
       },
     });
   }
@@ -54,40 +70,44 @@ export class ProjectsService {
       where: { id },
       data: {
         name: input.name,
-        description: input.description
+        description: input.description,
       },
-      include: { 
-        tickets: {
+      include: {
+        tickets: { include: { author: true } },
+        members: {
           include: {
-            author: true
-          }
-        }
-      }
+            user: { select: { id: true, email: true, username: true, name: true } },
+          },
+        },
+      },
     });
 
-    this.gateway.emitToUser(project.ownerId, 'project:updated', { type: 'updated', project });
+    // Notify all members
+    for (const member of project.members) {
+      this.gateway.emitToUser(member.userId, 'project:updated', { type: 'updated', project });
+    }
     return project;
   }
 
   async delete(id: string) {
     try {
       const project = await this.prisma.project.findUnique({
-        where: { id }
+        where: { id },
+        include: { members: true },
       });
-      
-      if (!project) {
-        throw new Error('Project not found');
-      }
 
-      const ownerId = project.ownerId;
+      if (!project) throw new Error('Project not found');
 
-      // Delete in the correct order to avoid foreign key constraint violations
-      await this.prisma.activity.deleteMany({ where: { projectId: id } });
-      await this.prisma.membership.deleteMany({ where: { projectId: id } });
-      await this.prisma.ticket.deleteMany({ where: { projectId: id } });
+      const memberIds = project.members.map(m => m.userId);
+
+      // Cascade delete handles the rest via onDelete: Cascade
       const deletedProject = await this.prisma.project.delete({ where: { id } });
 
-      this.gateway.emitToUser(ownerId, 'project:updated', { type: 'deleted', projectId: id });
+      // Notify all former members
+      for (const uid of memberIds) {
+        this.gateway.emitToUser(uid, 'project:updated', { type: 'deleted', projectId: id });
+      }
+
       return deletedProject;
     } catch (error) {
       console.error('Error deleting project:', error);
