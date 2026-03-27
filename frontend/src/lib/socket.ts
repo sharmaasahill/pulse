@@ -28,4 +28,11 @@ export function joinProject(projectId: string, userId?: string) {
   }
 }
 
+export function disconnectSocket() {
+  if (socket) {
+    socket.disconnect();
+    socket = null;
+  }
+}
+
 

@@ -129,6 +129,10 @@ export class InvitesService {
   }
 
   private async verifyOwner(projectId: string, userId: string) {
+    const project = await this.prisma.project.findUnique({ where: { id: projectId } });
+    if (!project) throw new NotFoundException('Project not found');
+    if (project.ownerId === userId) return;
+
     const membership = await this.prisma.membership.findUnique({
       where: { userId_projectId: { userId, projectId } },
     });

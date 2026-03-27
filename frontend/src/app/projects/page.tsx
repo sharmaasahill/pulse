@@ -110,6 +110,8 @@ export default function ProjectsPage() {
   const [editingProject, setEditingProject] = useState<{ id: string; name: string; description?: string } | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [joinCode, setJoinCode] = useState("");
   const [showDeleteModal, setShowDeleteModal] = useState<{ id: string; name: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
@@ -229,6 +231,21 @@ export default function ProjectsPage() {
       setShowDeleteModal(null);
     } catch { /* ignore */ }
     finally { setLoading(false); }
+  }
+
+  async function joinProjectByCode() {
+    if (!joinCode.trim()) return;
+    setLoading(true);
+    try {
+      await api.post("/invites/join/code", { code: joinCode.trim() });
+      await loadProjects();
+      setShowJoinModal(false);
+      setJoinCode("");
+    } catch (err: any) {
+      alert(err?.response?.data?.message || "Invalid or expired access code.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   function openEditModal(project: Project) {
@@ -382,9 +399,14 @@ export default function ProjectsPage() {
               {items.length} board{items.length !== 1 ? "s" : ""} · {stats.totalTickets} total tasks · {stats.activeBoards} active
             </p>
           </div>
-          <button className="btn-orange" onClick={() => { setName(""); setDescription(""); setSelectedColor("orange"); setShowCreateModal(true); }}>
-            <Plus size={16} /> New Project
-          </button>
+          <div style={{ display: "flex", gap: 12 }}>
+            <button className="btn-ghost-dark" onClick={() => setShowJoinModal(true)}>
+              <Users size={16} /> Join Project
+            </button>
+            <button className="btn-orange" onClick={() => { setName(""); setDescription(""); setSelectedColor("orange"); setShowCreateModal(true); }}>
+              <Plus size={16} /> New Project
+            </button>
+          </div>
         </div>
 
         {/* ══════════ STATS ROW ══════════ */}
@@ -439,9 +461,14 @@ export default function ProjectsPage() {
             <p style={{ color: "rgba(255,255,255,0.4)", marginBottom: 28, fontSize: 15, maxWidth: 320, margin: "0 auto 28px", lineHeight: 1.6 }}>
               Create your first project to start organizing tasks and collaborating with your team.
             </p>
-            <button className="btn-orange" style={{ padding: "14px 28px", fontSize: 15 }} onClick={() => { setName(""); setDescription(""); setSelectedColor("orange"); setShowCreateModal(true); }}>
-              <Plus size={18} /> Create First Project
-            </button>
+            <div style={{ display: "flex", justifyContent: "center", gap: 12 }}>
+              <button className="btn-ghost-dark" style={{ padding: "14px 28px", fontSize: 15 }} onClick={() => setShowJoinModal(true)}>
+                <Users size={18} /> Join Project
+              </button>
+              <button className="btn-orange" style={{ padding: "14px 28px", fontSize: 15 }} onClick={() => { setName(""); setDescription(""); setSelectedColor("orange"); setShowCreateModal(true); }}>
+                <Plus size={18} /> Create First Project
+              </button>
+            </div>
           </div>
         ) : viewMode === "grid" ? (
           <>
@@ -587,6 +614,29 @@ export default function ProjectsPage() {
               <button className="btn-ghost-dark" onClick={() => setShowDeleteModal(null)}>Cancel</button>
               <button onClick={() => deleteProject(showDeleteModal.id)} disabled={loading} style={{ background: "#ef4444", border: "none", color: "#fff", fontSize: 14, fontWeight: 700, padding: "11px 18px", borderRadius: 12, cursor: "pointer", opacity: loading ? 0.6 : 1, fontFamily: "inherit" }}>
                 {loading ? "Deleting…" : "Delete Project"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Join Modal ─── */}
+      {showJoinModal && (
+        <div className="modal-glass" onClick={() => setShowJoinModal(false)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <button style={{ position: "absolute", right: 20, top: 20, background: "none", border: "none", color: "#fff", cursor: "pointer" }} onClick={() => setShowJoinModal(false)}>
+              <X size={20} />
+            </button>
+            <h2 style={{ fontSize: 24, fontWeight: 800, margin: "0 0 8px" }}>Join Project</h2>
+            <p style={{ color: "rgba(255,255,255,0.4)", margin: "0 0 24px", fontSize: 14 }}>Enter the access code shared by the project owner.</p>
+            <div style={{ marginBottom: 20 }}>
+              <div className="section-label">Access Code</div>
+              <input className="input-dark" placeholder="e.g. 5A92B4" value={joinCode} onChange={e => setJoinCode(e.target.value.toUpperCase())} autoFocus />
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 32 }}>
+              <button className="btn-ghost-dark" onClick={() => setShowJoinModal(false)}>Cancel</button>
+              <button className="btn-orange" onClick={joinProjectByCode} disabled={!joinCode.trim() || loading}>
+                {loading ? "Joining..." : "Join Project"}
               </button>
             </div>
           </div>

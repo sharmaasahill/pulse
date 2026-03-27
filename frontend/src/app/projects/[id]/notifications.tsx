@@ -8,6 +8,7 @@ interface Activity {
   type: string;
   createdAt: string;
   actorId: string;
+  actor?: { name?: string; email: string; username?: string };
 }
 
 export function Notifications({ projectId }: { projectId: string }) {
@@ -29,7 +30,7 @@ export function Notifications({ projectId }: { projectId: string }) {
   return (
     <div className="card">
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
-        <h3 style={{ fontSize: 18, fontWeight: 600, margin: 0, color: '#1e293b' }}>
+        <h3 style={{ fontSize: 18, fontWeight: 600, margin: 0, color: '#f8fafc' }}>
           Recent Activity
         </h3>
         <span style={{ 
@@ -74,7 +75,7 @@ export function Notifications({ projectId }: { projectId: string }) {
                 {getActivityType(activity.type)}
               </div>
               <div style={{ flex: 1 }}>
-                <p style={{ margin: '0 0 4px 0', color: '#1e293b' }}>
+                <p style={{ margin: '0 0 4px 0', color: '#f8fafc' }}>
                   {activity.message}
                 </p>
                 <div style={{ 
@@ -84,8 +85,8 @@ export function Notifications({ projectId }: { projectId: string }) {
                   fontSize: 12,
                   color: '#94a3b8'
                 }}>
-                  <span>by {activity.actorId}</span>
-                  <span>{new Date(activity.createdAt).toLocaleString()}</span>
+                  <span>by {activity.actor?.name || activity.actor?.username || activity.actor?.email || activity.actorId}</span>
+                  <span>{new Date(activity.createdAt).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}</span>
                 </div>
               </div>
             </div>

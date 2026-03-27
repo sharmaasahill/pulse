@@ -1,8 +1,9 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { api } from "@/lib/api";
 import { useAuth } from "@/store/useAuth";
-import { getSocket } from "@/lib/socket";
+import { getSocket, joinProject } from "@/lib/socket";
 import { Bell } from "lucide-react";
 
 export function NotificationBell() {
@@ -10,12 +11,21 @@ export function NotificationBell() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [hasUnread, setHasUnread] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Close when clicking outside
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      if (
+        containerRef.current && !containerRef.current.contains(e.target as Node) &&
+        (!dropdownRef.current || !dropdownRef.current.contains(e.target as Node))
+      ) {
         setOpen(false);
       }
     }
@@ -25,7 +35,11 @@ export function NotificationBell() {
 
   // Fetch notifications
   useEffect(() => {
-    if (!token) return;
+    if (!token) {
+      setNotifications([]);
+      setHasUnread(false);
+      return;
+    }
 
     const fetchNotifications = () => {
       api.get("/activities/notifications")
@@ -38,6 +52,11 @@ export function NotificationBell() {
     };
 
     fetchNotifications();
+
+    // Ensure we join all projects to receive events across workspaces
+    api.get("/projects").then(res => {
+      res.data.forEach((p: any) => joinProject(p.id));
+    }).catch(() => {});
 
     const socket = getSocket();
     const handleUpdate = () => fetchNotifications();
@@ -75,12 +94,13 @@ export function NotificationBell() {
         )}
       </button>
 
-      {open && (
-        <div style={{
-          position: "absolute", top: "100%", right: 0, marginTop: "8px",
-          width: 320, background: "rgba(20,20,20,0.95)", backdropFilter: "blur(12px)",
+      {open && mounted && createPortal(
+        <div ref={dropdownRef} style={{
+          position: "fixed", top: "calc(var(--navbar-height) + 12px)", right: 16,
+          width: 320, maxWidth: "calc(100vw - 32px)",
+          background: "rgba(20,20,20,0.95)", backdropFilter: "blur(12px)",
           border: "1px solid rgba(255,255,255,0.1)", borderRadius: 16,
-          boxShadow: "0 10px 40px rgba(0,0,0,0.5)", zIndex: 1000, overflow: "hidden"
+          boxShadow: "0 10px 40px rgba(0,0,0,0.5)", zIndex: 999999, overflow: "hidden"
         }}>
           <div style={{ padding: "14px 16px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>Notifications</span>
@@ -121,7 +141,8 @@ export function NotificationBell() {
               })
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

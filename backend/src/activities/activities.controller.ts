@@ -9,7 +9,7 @@ export class ActivitiesController {
 
   @Get('notifications')
   getNotifications(@Request() req: any) {
-    return this.activities.getNotifications(req.user.id);
+    return this.activities.getNotifications(req.user.userId);
   }
 
   @Get(':projectId')

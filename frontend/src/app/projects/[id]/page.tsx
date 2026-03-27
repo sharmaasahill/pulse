@@ -33,7 +33,14 @@ interface Member {
   userId: string;
   role: "OWNER" | "EDITOR" | "VIEWER";
 }
-interface Project { id: string; name: string; tickets?: Ticket[]; members?: Member[] }
+interface Project {
+  id: string;
+  name: string;
+  updatedAt?: string;
+  tickets?: Ticket[];
+  members?: Array<{ userId: string; role: string; user?: any }>;
+  owner?: { id: string; name?: string; email?: string; username?: string };
+}
 
 type Priority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
 
@@ -424,7 +431,7 @@ export default function ProjectDetailPage() {
   }
 
   const activeTicket = project.tickets?.find(t => t.id === activeId);
-  const userRole = project.members?.find(m => m.userId === user?.id)?.role || "VIEWER";
+  const userRole = (project.owner?.id === user?.id) ? "OWNER" : (project.members?.find(m => m.userId === user?.id)?.role || "VIEWER");
   const canEdit = userRole === "OWNER" || userRole === "EDITOR";
 
   return (

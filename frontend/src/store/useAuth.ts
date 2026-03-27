@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { api, setAuthToken } from '@/lib/api';
+import { disconnectSocket } from '@/lib/socket';
 
 type UserData = {
   id: string;
@@ -34,6 +35,7 @@ export const useAuth = create<AuthState>()(
       },
       logout() {
         setAuthToken(undefined);
+        disconnectSocket();
         set({ token: undefined, user: undefined });
       },
     }),

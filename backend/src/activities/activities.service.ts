@@ -30,8 +30,7 @@ export class ActivitiesService {
 
     return this.prisma.activity.findMany({
       where: {
-        projectId: { in: projectIds },
-        actorId: { not: userId }
+        projectId: { in: projectIds }
       },
       orderBy: { createdAt: 'desc' },
       take: 20,
