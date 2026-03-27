@@ -13,12 +13,14 @@ Pulse is a high-performance, full-stack Kanban board application designed for se
 
 | Feature | Description |
 |---|---|
-| **Real-Time Global Sync** | Project creations, deletions, and task movements reflect instantly across all sessions via user-specific WebSocket rooms. |
-| **Mobile-First UX** | Optimized for touch: Native-scrolling board with an intuitive "Quick-Move" menu on task cards (replaces complex drag-and-drop on mobile). |
-| **Desktop Drag-and-Drop** | Desktop users enjoy a fluid dragging experience powered by `@dnd-kit`. |
-| **Smart Auth** | Secure Register/Login flow with JWT expiration and persistence; each user manages their own private workspace. |
-| **Glassmorphic UI** | Premium dark-themed aesthetic with vibrant gradients, blurred backdrops, and interactive micro-animations. |
-| **Board Customization** | 8 unique gradient color themes per board, Starred projects for quick access, and a collapsible sidebar. |
+| **Real-Time Global Sync** | Project creation, task movements, and user activities reflect instantly across all sessions via isolated WebSocket rooms. |
+| **Role-Based Access Control (RBAC)** | Granular permissions system defining `OWNER`, `EDITOR`, and `VIEWER` roles to secure ticket mutations and invite management. |
+| **Instant Invites & Access Codes** | Easily onboard team members using expiring Invite Links or 6-character Access Codes via the sleek "Join Project" interface. |
+| **Live Notification Bell** | Instantly receive alerts for project activities (e.g. "Sahil dropped a task in Done") with real-time actor attribution. |
+| **Mobile-First UX** | Optimized for touch: Native-scrolling board with an intuitive "Quick-Move" menu on task cards. |
+| **Desktop Drag-and-Drop** | Desktop users enjoy a fluid physical dragging experience powered by `@dnd-kit`. |
+| **Smart Auth & Memory Leak Prevention** | Secure JWT flow where WebSockets actively clean up stale room subscriptions upon logout, guaranteeing absolute data isolation between accounts. |
+| **Glassmorphic UI** | Premium dark-themed aesthetic with tailored glow gradients, blurred backdrops, and interactive micro-animations. |
 
 ---
 
@@ -75,10 +77,12 @@ NEXT_PUBLIC_API_URL="http://localhost:3001"
 pulse/
 ├── backend/
 │   ├── src/
-│   │   ├── auth/          # Secure registration & login
-│   │   ├── projects/      # Workspace & membership logic
+│   │   ├── auth/          # Secure registration & JWT logins
+│   │   ├── projects/      # Workspace organization
 │   │   ├── tickets/       # Task management & status routing
-│   │   └── realtime/      # User-specific WebSocket gateways
+│   │   ├── invites/       # Access code generation & expiration logic
+│   │   ├── activities/    # Notification timeline and actor logging
+│   │   └── realtime/      # Namespaced WebSocket gateways
 └── frontend/
     └── src/
         ├── app/           # App Router, Layouts & Components
