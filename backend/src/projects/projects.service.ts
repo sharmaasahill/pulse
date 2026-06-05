@@ -52,7 +52,10 @@ export class ProjectsService {
       where: { id },
       include: {
         tickets: {
-          include: { author: true },
+          include: {
+            author: { select: { id: true, email: true, username: true, name: true } },
+            assignee: { select: { id: true, email: true, username: true, name: true } },
+          },
           orderBy: { createdAt: 'desc' },
         },
         members: {

@@ -21,6 +21,7 @@ enum TicketPriority {
   LOW
   MEDIUM
   HIGH
+  URGENT
 }
 
 enum MemberRole {
@@ -47,7 +48,9 @@ model User {
   activities     Activity[]
   memberships    Membership[]
   updatedTickets Ticket[]     @relation("UpdatedByTickets")
+  assignedTickets Ticket[]    @relation("AssignedTickets")
   comments       Comment[]    @relation("AuthorComments")
+  notifications  Notification[]
 }
 
 model Project {
@@ -106,18 +109,21 @@ model Ticket {
   priority    TicketPriority @default(MEDIUM)
   projectId   String
   authorId    String
+  assigneeId  String?
   updatedById String?
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
   project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   author     User       @relation("AuthorTickets", fields: [authorId], references: [id])
+  assignee   User?      @relation("AssignedTickets", fields: [assigneeId], references: [id])
   updatedBy  User?      @relation("UpdatedByTickets", fields: [updatedById], references: [id])
   activities Activity[]
   comments   Comment[]
 
   @@index([projectId])
   @@index([authorId])
+  @@index([assigneeId])
 }
 
 model Comment {
@@ -151,3 +157,22 @@ model Activity {
   @@index([ticketId])
 }
 
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  message   String
+  link      String?
+  projectId String?
+  ticketId  String?
+  actorName String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, read])
+}

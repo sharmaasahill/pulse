@@ -1,15 +1,26 @@
 import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppGateway } from '../realtime/gateway';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class CommentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly gateway: AppGateway,
+    private readonly notifications: NotificationsService,
   ) {}
 
-  async list(ticketId: string) {
+  async list(ticketId: string, userId: string) {
+    const ticket = await this.prisma.ticket.findUnique({ where: { id: ticketId } });
+    if (!ticket) throw new NotFoundException('Ticket not found');
+
+    // Only project members may read comments
+    const membership = await this.prisma.membership.findUnique({
+      where: { userId_projectId: { userId, projectId: ticket.projectId } },
+    });
+    if (!membership) throw new ForbiddenException('Not a member of this project');
+
     return this.prisma.comment.findMany({
       where: { ticketId },
       include: {
@@ -47,6 +58,20 @@ export class CommentsService {
       ticketId: input.ticketId,
       comment,
     });
+
+    // Notify other project members about the new comment
+    const author = comment.author?.name || comment.author?.username || 'Someone';
+    await this.notifications.notifyProjectMembers(
+      ticket.projectId,
+      {
+        type: 'comment_created',
+        title: 'New comment',
+        message: `${author} commented on "${ticket.title}"`,
+        link: `/projects/${ticket.projectId}`,
+        ticketId: ticket.id,
+      },
+      input.authorId,
+    );
 
     return comment;
   }

@@ -25,6 +25,8 @@ import {
 interface Ticket {
   id: string; title: string; authorId?: string;
   author?: { id: string; email: string; name?: string; username?: string };
+  assigneeId?: string | null;
+  assignee?: { id: string; email: string; name?: string; username?: string } | null;
   status: "TODO" | "IN_PROGRESS" | "DONE";
   description?: string;
   priority?: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
@@ -127,17 +129,33 @@ function DraggableTicket({ ticket, onEdit, onDelete, onMove }: {
         </p>
       )}
 
-      {/* Author */}
-      {ticket.author?.email && (
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
-          <div style={{ width: 20, height: 20, borderRadius: "50%", background: "linear-gradient(135deg,#f97316,#ea580c)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 800, color: "#fff", flexShrink: 0 }}>
-            {(ticket.author.name || ticket.author.username || ticket.author.email).charAt(0).toUpperCase()}
+      {/* Author + Assignee */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, marginTop: 8 }}>
+        {ticket.author?.email ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+            <div style={{ width: 20, height: 20, borderRadius: "50%", background: "linear-gradient(135deg,#f97316,#ea580c)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 800, color: "#fff", flexShrink: 0 }}>
+              {(ticket.author.name || ticket.author.username || ticket.author.email).charAt(0).toUpperCase()}
+            </div>
+            <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 110 }}>
+              {ticket.author.name || ticket.author.username || ticket.author.email.split("@")[0]}
+            </span>
           </div>
-          <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 140 }}>
-            {ticket.author.name || ticket.author.username || ticket.author.email.split("@")[0]}
-          </span>
-        </div>
-      )}
+        ) : <span />}
+
+        {ticket.assignee && (
+          <div
+            title={`Assigned to ${ticket.assignee.name || ticket.assignee.username || ticket.assignee.email}`}
+            style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0, background: "rgba(16,185,129,0.1)", padding: "2px 7px 2px 3px", borderRadius: 20 }}
+          >
+            <div style={{ width: 18, height: 18, borderRadius: "50%", background: "linear-gradient(135deg,#10b981,#059669)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 800, color: "#fff" }}>
+              {(ticket.assignee.name || ticket.assignee.username || ticket.assignee.email).charAt(0).toUpperCase()}
+            </div>
+            <span style={{ fontSize: 10, color: "#10b981", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 80 }}>
+              {ticket.assignee.name || ticket.assignee.username || ticket.assignee.email.split("@")[0]}
+            </span>
+          </div>
+        )}
+      </div>
 
       {/* Mobile Move Actions */}
       <div className="mobile-move-actions" style={{ display: "none", gap: 8, marginTop: 12, borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 12 }}>
@@ -286,6 +304,7 @@ export default function ProjectDetailPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("MEDIUM");
+  const [assigneeId, setAssigneeId] = useState<string>("");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -356,16 +375,16 @@ export default function ProjectDetailPage() {
   async function createTicket() {
     if (!title.trim()) return;
     try {
-      await api.post("/tickets", { projectId, title: title.trim(), description: description.trim(), priority, authorEmail: user?.email });
-      setTitle(""); setDescription(""); setPriority("MEDIUM"); setShowCreateModal(false);
+      await api.post("/tickets", { projectId, title: title.trim(), description: description.trim(), priority, assigneeId: assigneeId || undefined, authorEmail: user?.email });
+      setTitle(""); setDescription(""); setPriority("MEDIUM"); setAssigneeId(""); setShowCreateModal(false);
     } catch { /* ignore */ }
   }
 
   async function updateTicket() {
     if (!editingTicket || !title.trim()) return;
     try {
-      await api.patch(`/tickets/${editingTicket.id}`, { title: title.trim(), description: description.trim(), priority });
-      setEditingTicket(null); setTitle(""); setDescription(""); setPriority("MEDIUM");
+      await api.patch(`/tickets/${editingTicket.id}`, { title: title.trim(), description: description.trim(), priority, assigneeId: assigneeId || null });
+      setEditingTicket(null); setTitle(""); setDescription(""); setPriority("MEDIUM"); setAssigneeId("");
     } catch { /* ignore */ }
   }
 
@@ -375,7 +394,7 @@ export default function ProjectDetailPage() {
   }
 
   function openEditModal(ticket: Ticket) {
-    setEditingTicket(ticket); setTitle(ticket.title); setDescription(ticket.description || ""); setPriority(ticket.priority || "MEDIUM");
+    setEditingTicket(ticket); setTitle(ticket.title); setDescription(ticket.description || ""); setPriority(ticket.priority || "MEDIUM"); setAssigneeId(ticket.assigneeId || "");
   }
 
   async function moveTicket(ticketId: string, newStatus: "TODO" | "IN_PROGRESS" | "DONE") {
@@ -532,7 +551,7 @@ export default function ProjectDetailPage() {
                 style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: 10, padding: "8px 12px 8px 32px", color: "#fff", fontSize: 13, outline: "none", width: 220, fontFamily: "inherit" }} />
             </div>
             {canEdit && (
-              <button className="btn-orange-sm" style={{ flexShrink: 0 }} onClick={() => { setTitle(""); setDescription(""); setPriority("MEDIUM"); setEditingTicket(null); setShowCreateModal(true); }}>
+              <button className="btn-orange-sm" style={{ flexShrink: 0 }} onClick={() => { setTitle(""); setDescription(""); setPriority("MEDIUM"); setAssigneeId(""); setEditingTicket(null); setShowCreateModal(true); }}>
                 <Plus size={15} /> Add Task
               </button>
             )}
@@ -642,6 +661,28 @@ export default function ProjectDetailPage() {
                   );
                 })}
               </div>
+            </div>
+
+            {/* Assignee */}
+            <div style={{ marginBottom: 28 }}>
+              <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.4)", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.08em" }}>Assignee</label>
+              <select
+                className="board-input"
+                value={assigneeId}
+                onChange={e => setAssigneeId(e.target.value)}
+                style={{ cursor: "pointer", appearance: "none" }}
+              >
+                <option value="" style={{ background: "#1a1a1a" }}>Unassigned</option>
+                {(project.members ?? []).map(m => {
+                  const u = m.user || {};
+                  const label = u.name || u.username || u.email || m.userId;
+                  return (
+                    <option key={m.userId} value={m.userId} style={{ background: "#1a1a1a" }}>
+                      {label}{m.userId === user?.id ? " (you)" : ""}
+                    </option>
+                  );
+                })}
+              </select>
             </div>
 
             {/* Comments rendered inside the task modal when editing */}

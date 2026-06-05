@@ -17,8 +17,8 @@ export class CommentsController {
   constructor(private readonly comments: CommentsService) {}
 
   @Get(':ticketId')
-  list(@Param('ticketId') ticketId: string) {
-    return this.comments.list(ticketId);
+  list(@Param('ticketId') ticketId: string, @Req() req: any) {
+    return this.comments.list(ticketId, req.user.userId);
   }
 
   @Post()

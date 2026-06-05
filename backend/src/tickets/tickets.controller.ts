@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards, Req } from '@nestjs/common';
 import { IsOptional, IsString } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt.guard';
+import { RoleGuard, RequireRole } from '../common/guards/role.guard';
 import { TicketsService } from './tickets.service';
 import { Prisma } from '@prisma/client';
 
@@ -15,6 +16,9 @@ class CreateTicketDto {
   @IsOptional()
   @IsString()
   authorEmail?: string;
+  @IsOptional()
+  @IsString()
+  assigneeId?: string;
   @IsOptional()
   priority?: Prisma.TicketCreateInput['priority'];
   @IsOptional()
@@ -32,19 +36,23 @@ class UpdateTicketDto {
   @IsOptional()
   @IsString()
   description?: string;
+  @IsOptional()
+  assigneeId?: string | null;
 }
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RoleGuard)
 @Controller('tickets')
 export class TicketsController {
   constructor(private readonly tickets: TicketsService) {}
 
   @Get(':id')
-  get(@Param('id') id: string) {
-    return this.tickets.get(id);
+  get(@Req() req: any, @Param('id') id: string) {
+    return this.tickets.get(id, req.user.userId);
   }
 
+  // projectId is in the body, so RoleGuard can enforce EDITOR+ here.
   @Post()
+  @RequireRole('EDITOR')
   create(@Req() req: any, @Body() dto: CreateTicketDto) {
     return this.tickets.create({ ...dto, authorId: req.user.userId });
   }
@@ -59,5 +67,3 @@ export class TicketsController {
     return this.tickets.delete(id, req.user.userId);
   }
 }
-
-
