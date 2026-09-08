@@ -1,923 +1,847 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
-import { useAuth } from "@/store/useAuth";
-import { LoginModal } from "./components/LoginModal";
+
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/store/useAuth";
+import { useReveal, useScrollProgress } from "@/lib/reveal";
+import { LoginModal } from "./components/LoginModal";
 import {
-  ArrowRight, Users, Shield, BarChart3,
-  Columns3, Zap, CheckCircle, TrendingUp, ChevronRight, Menu, X,
-  Github, Slack, Figma, Twitter, Heart,
-  Terminal, Globe
+  ArrowRight, ArrowUpRight, Check, MessageSquare, Clock,
+  Users, KeyRound, Bell, Search, Menu, X, Zap,
 } from "lucide-react";
 
-/* ── Responsive styles injected as a style tag ── */
-const STYLES = `
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-  
-  .lp-root * { box-sizing: border-box; }
-  .lp-root { font-family: 'Inter', -apple-system, sans-serif; }
+/* ═══════════════════════════════════════════════════════════════
+   CONTENT
+   Everything below describes behaviour that exists in this
+   codebase. No invented customers, metrics, logos or pricing.
+   ═══════════════════════════════════════════════════════════════ */
 
-  /* ── Navbar ── */
-  .lp-nav { 
-    display: flex; align-items: center; justify-content: space-between; 
-    position: relative; width: 100%; max-width: 1200px; margin: 0 auto; 
-    padding: 0 28px; height: 58px;
-  }
-  .lp-nav-logo { flex: 1; display: flex; justify-content: flex-start; }
-  .lp-nav-actions { flex: 1; display: flex; gap: 12px; align-items: center; justify-content: flex-end; }
-  
-  /* Absolute center for nav links */
-  .lp-nav-links { 
-    display: flex; gap: 32px; align-items: center; 
-    position: absolute; left: 50%; transform: translateX(-50%);
-  }
-  .lp-nav-link {
-    font-size: 14px; font-weight: 500; color: rgba(255,255,255,0.5);
-    text-decoration: none; transition: color 0.2s;
-  }
-  .lp-nav-link:hover { color: #fff; }
-  .lp-hamburger { display: none; background: none; border: none; cursor: pointer; color: rgba(255,255,255,0.7); }
+const CAPABILITIES = [
+  "Drag & drop board",
+  "Real-time sync",
+  "Assignees",
+  "Four priority levels",
+  "Threaded comments",
+  "Activity history",
+  "Owner / Editor / Viewer roles",
+  "Invite links & join codes",
+  "In-app notifications",
+];
 
-  /* ── Hero ── */
-  .lp-hero-content { text-align: center; max-width: 860px; width: 100%; position: relative; z-index: 10; }
-  .lp-hero-btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-  
-  /* ── Bento Dashboard ── */
-  .lp-bento-main { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto; gap: 12px; }
-  .lp-bento-kanban { grid-column: 1; grid-row: 1; }
-  .lp-bento-metric { grid-column: 2; grid-row: 1; }
-  .lp-bento-tasks { grid-column: 1; grid-row: 2; }
-  .lp-bento-activity { grid-column: 2; grid-row: 2; }
-  .lp-kanban-cols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+const FEATURES = [
+  {
+    n: "01",
+    title: "A board that moves when your team does",
+    body:
+      "Three columns — To Do, In Progress, Done. Drag a card and every teammate viewing the board sees it move, immediately, over a websocket. No refresh, no polling.",
+    points: ["Drag & drop between columns", "Instant sync across viewers", "Keyboard and touch friendly"],
+  },
+  {
+    n: "02",
+    title: "Enough structure to stay honest",
+    body:
+      "Each task carries a priority, an optional assignee, a description and its own comment thread. Every change is written to the project's activity history, so “who moved this?” always has an answer.",
+    points: ["Low → Medium → High → Urgent", "Assign any project member", "Per-task comments", "Full activity log"],
+  },
+  {
+    n: "03",
+    title: "Sharing without handing over the keys",
+    body:
+      "Invite by link or a short join code, and choose what the invitee can do. Viewers read. Editors move and create work. Owners control the project itself. The server enforces it on every request.",
+    points: ["Owner / Editor / Viewer", "Shareable link or join code", "Optional expiry", "Checked server-side"],
+  },
+];
 
-  /* ── Stats ── */
-  .lp-stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 32px; text-align: center; }
+const STEPS = [
+  { k: "Create", d: "Make a board and give it a name. You're the owner." },
+  { k: "Invite", d: "Share a link or code, and pick each person's role." },
+  { k: "Work", d: "Add tasks, assign them, drag them across. Everyone stays in sync." },
+];
 
-  /* ── Features ── */
-  .lp-features-bento {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    grid-template-rows: auto auto;
-    gap: 14px;
-  }
-  .lp-feat-1 { grid-column: 1 / 3; grid-row: 1; }
-  .lp-feat-2 { grid-column: 3; grid-row: 1; }
-  .lp-feat-3 { grid-column: 1; grid-row: 2; }
-  .lp-feat-4 { grid-column: 2; grid-row: 2; }
-  .lp-feat-5 { grid-column: 3 / 4; grid-row: 2; }
+const STACK = [
+  { name: "Next.js", role: "App Router front end" },
+  { name: "NestJS", role: "Typed REST API" },
+  { name: "PostgreSQL", role: "Primary datastore" },
+  { name: "Prisma", role: "Schema & queries" },
+  { name: "Socket.IO", role: "Live updates" },
+  { name: "JWT + bcrypt", role: "Auth & hashing" },
+];
 
-  /* ── Steps ── */
-  .lp-steps-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+/* ═══════════════════════════════════════════════════════════════
+   BOARD PREVIEW
+   An honest illustration of the real UI: columns, priority chips,
+   assignee avatars, comment counts. One card cycles between
+   In Progress and Done to show what live sync looks like.
+   ═══════════════════════════════════════════════════════════════ */
 
-  /* ── Testimonials ── */
-  .lp-test-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+type DemoCard = {
+  id: string;
+  title: string;
+  priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+  who: string;
+  comments?: number;
+};
 
-  /* ── Pricing ── */
-  .lp-price-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; max-width: 800px; margin: 0 auto; }
+const PRIORITY: Record<DemoCard["priority"], { label: string; fg: string; bg: string }> = {
+  LOW: { label: "Low", fg: "var(--ink-tertiary)", bg: "var(--surface-sunken)" },
+  MEDIUM: { label: "Medium", fg: "var(--warning)", bg: "var(--warning-tint)" },
+  HIGH: { label: "High", fg: "var(--accent-strong)", bg: "var(--accent-tint)" },
+  URGENT: { label: "Urgent", fg: "var(--danger)", bg: "var(--danger-tint)" },
+};
 
-  /* ── Tech stack ── */
-  .lp-tech-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+const TODO: DemoCard[] = [
+  { id: "t1", title: "Draft onboarding copy", priority: "MEDIUM", who: "RS" },
+  { id: "t2", title: "Audit empty states", priority: "LOW", who: "AK" },
+];
+const PROGRESS: DemoCard[] = [
+  { id: "p1", title: "Wire up invite expiry", priority: "HIGH", who: "SS", comments: 3 },
+];
+const DONE: DemoCard[] = [
+  { id: "d1", title: "Role checks on the API", priority: "URGENT", who: "SS", comments: 5 },
+];
 
-  /* ── Section container ── */
-  .lp-section { padding: 100px 48px; }
-  .lp-container { max-width: 1100px; margin: 0 auto; }
-  .lp-container-sm { max-width: 900px; margin: 0 auto; }
-
-  /* ── Divider ── */
-  .lp-divider { border-top: 1px solid rgba(255,255,255,0.05); }
-
-  /* ── Card ── */
-  .lp-card { border-radius: 16px; padding: 28px; position: relative; overflow: hidden; }
-  .lp-card-dark { background: #1c1c1e; border: 1px solid rgba(255,255,255,0.07); }
-  .lp-card-orange { background: #f97316; }
-  .lp-card-hover { transition: all 0.25s; cursor: default; }
-  .lp-card-hover:hover { transform: translateY(-3px); border-color: rgba(249,115,22,0.4) !important; }
-
-  /* ── Btn ── */
-  .lp-btn-orange {
-    background: #f97316; border: none; color: #fff;
-    font-size: 15px; font-weight: 700; cursor: pointer;
-    padding: 14px 28px; border-radius: 12px;
-    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-    transition: all 0.2s; box-shadow: 0 4px 24px rgba(249,115,22,0.3);
-    font-family: inherit; white-space: nowrap;
-  }
-  .lp-btn-orange:hover { transform: translateY(-1px); box-shadow: 0 8px 32px rgba(249,115,22,0.45); background: #ea6c0a; }
-  .lp-btn-ghost {
-    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10);
-    color: rgba(255,255,255,0.8); font-size: 15px; font-weight: 600;
-    padding: 14px 28px; border-radius: 12px;
-    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-    text-decoration: none; transition: all 0.2s; font-family: inherit; white-space: nowrap;
-  }
-  .lp-btn-ghost:hover { background: rgba(255,255,255,0.12); color: #fff; }
-
-  /* ── Animations ── */
-  @keyframes lp-float {
-    0%, 100% { transform: translateY(0px) scale(1); }
-    50% { transform: translateY(-15px) scale(1.02); }
-  }
-  @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(30px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  .lp-orb-1 { animation: lp-float 8s ease-in-out infinite; }
-  .lp-orb-2 { animation: lp-float 10s ease-in-out infinite reverse; }
-
-  /* ═══════════════════════════════
-     TABLET  ≤ 1024px
-  ═══════════════════════════════ */
-  @media (max-width: 1024px) {
-    .lp-section { padding: 80px 32px; }
-    .lp-bento-main { grid-template-columns: 1fr 1fr; }
-    .lp-bento-metric { display: none; }
-    .lp-bento-tasks { grid-column: 2; grid-row: 1; }
-    .lp-bento-activity { grid-column: 1 / 3; grid-row: 2; }
-    .lp-features-bento { grid-template-columns: 1fr 1fr; }
-    .lp-feat-1 { grid-column: 1 / 3; grid-row: 1; }
-    .lp-feat-2 { grid-column: 1; grid-row: 2; }
-    .lp-feat-3 { grid-column: 2; grid-row: 2; }
-    .lp-feat-4 { grid-column: 1; grid-row: 3; }
-    .lp-feat-5 { grid-column: 2; grid-row: 3; }
-    .lp-tech-grid { grid-template-columns: repeat(3, 1fr); }
-    .lp-stats-grid { grid-template-columns: repeat(2, 1fr); gap: 24px; }
-    .lp-test-grid { grid-template-columns: 1fr 1fr; }
-    
-    /* Hide nav links on tablet so it doesn't collide with logo */
-    .lp-nav-links { display: none; }
-    .lp-hamburger { display: block; }
-  }
-
-  /* ═══════════════════════════════
-     MOBILE  ≤ 640px
-  ═══════════════════════════════ */
-  @media (max-width: 640px) {
-    .lp-section { padding: 60px 20px; }
-    .lp-nav-actions .lp-login-btn, .lp-nav-actions .lp-btn-orange { display: none; }
-
-    .lp-hero-content h1 { font-size: 34px !important; }
-    .lp-hero-content p { font-size: 16px !important; }
-    .lp-hero-btns { flex-direction: column; align-items: stretch; }
-    .lp-btn-orange, .lp-btn-ghost { width: 100%; }
-
-    .lp-bento-main { grid-template-columns: 1fr; }
-    .lp-bento-kanban { grid-column: 1; grid-row: 1; }
-    .lp-bento-metric { display: block; grid-column: 1; grid-row: 2; }
-    .lp-bento-tasks { grid-column: 1; grid-row: 3; }
-    .lp-bento-activity { grid-column: 1; grid-row: 4; }
-    .lp-kanban-cols { grid-template-columns: 1fr; gap: 8px; }
-
-    .lp-stats-grid { grid-template-columns: repeat(2, 1fr); gap: 24px; }
-
-    .lp-features-bento { grid-template-columns: 1fr; }
-    .lp-feat-1 { grid-column: 1; grid-row: 1; }
-    .lp-feat-2 { grid-column: 1; grid-row: 2; }
-    .lp-feat-3 { grid-column: 1; grid-row: 3; }
-    .lp-feat-4 { grid-column: 1; grid-row: 4; }
-    .lp-feat-5 { grid-column: 1; grid-row: 5; }
-
-    .lp-steps-grid { grid-template-columns: 1fr; gap: 16px; }
-    .lp-test-grid { grid-template-columns: 1fr; gap: 16px; }
-    .lp-price-grid { grid-template-columns: 1fr; gap: 16px; }
-    .lp-tech-grid { grid-template-columns: repeat(2, 1fr); }
-
-    .lp-section-title { font-size: 28px !important; }
-    .lp-footer-inner { flex-direction: column; gap: 16px; text-align: center; }
-  }
-`;
-
-/* ──────────────────────────────── */
-function useInView(threshold = 0.12) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    const el = ref.current; if (!el) return;
-    const obs = new IntersectionObserver(
-      ([e]) => { if (e.isIntersecting) { setVisible(true); obs.unobserve(el); } },
-      { threshold }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [threshold]);
-  return { ref, visible };
-}
-
-function Counter({ target, suffix = '' }: { target: number; suffix?: string }) {
-  const [count, setCount] = useState(0);
-  const ref = useRef<HTMLSpanElement>(null);
-  const started = useRef(false);
-  useEffect(() => {
-    const el = ref.current; if (!el) return;
-    const obs = new IntersectionObserver(([e]) => {
-      if (e.isIntersecting && !started.current) {
-        started.current = true;
-        const dur = 1800, t0 = performance.now();
-        const tick = (now: number) => {
-          const p = Math.min((now - t0) / dur, 1);
-          setCount(Math.floor((1 - Math.pow(1 - p, 3)) * target));
-          if (p < 1) requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
-      }
-    }, { threshold: 0.5 });
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [target]);
-  return <span ref={ref}>{count}{suffix}</span>;
-}
-
-/* ── Task pill ── */
-function TaskPill({ label, done, color }: { label: string; done: boolean; color: string }) {
+function Avatar({ initials, tone = "accent" }: { initials: string; tone?: "accent" | "neutral" }) {
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: '10px',
-      background: done ? 'rgba(255,255,255,0.04)' : color + '18',
-      borderRadius: '10px', padding: '10px 14px', marginBottom: '7px',
-      border: `1px solid ${done ? 'rgba(255,255,255,0.05)' : color + '40'}`,
-    }}>
-      <div style={{
-        width: '18px', height: '18px', borderRadius: '5px', flexShrink: 0,
-        background: done ? 'rgba(255,255,255,0.08)' : color,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        {done && <CheckCircle size={11} color="rgba(255,255,255,0.5)" />}
+    <span
+      aria-hidden
+      style={{
+        width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
+        display: "grid", placeItems: "center",
+        fontSize: 9, fontWeight: 700, letterSpacing: "0.02em",
+        color: tone === "accent" ? "#fff" : "var(--ink-secondary)",
+        background: tone === "accent" ? "var(--accent-gradient)" : "var(--surface-sunken)",
+        border: tone === "neutral" ? "1px solid var(--line)" : "none",
+      }}
+    >
+      {initials}
+    </span>
+  );
+}
+
+function Card({ card, moving = false }: { card: DemoCard; moving?: boolean }) {
+  const p = PRIORITY[card.priority];
+  return (
+    <div
+      style={{
+        background: "var(--surface)",
+        border: `1px solid ${moving ? "var(--accent)" : "var(--line)"}`,
+        borderRadius: "var(--r-md)",
+        padding: "11px 12px",
+        boxShadow: moving ? "var(--shadow-lg)" : "var(--shadow-xs)",
+        transform: moving ? "scale(1.03) rotate(-0.6deg)" : "none",
+        transition: "transform var(--t-slow) var(--ease-spring), box-shadow var(--t-slow) var(--ease-out-quart), border-color var(--t-base) linear",
+      }}
+    >
+      <span
+        className="badge"
+        style={{ color: p.fg, background: p.bg, marginBottom: 8, fontSize: 10.5 }}
+      >
+        {p.label}
+      </span>
+      <p style={{ fontSize: 13, fontWeight: 550, lineHeight: 1.45, color: "var(--ink)", margin: "0 0 10px" }}>
+        {card.title}
+      </p>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <Avatar initials={card.who} />
+        {card.comments ? (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--ink-tertiary)" }}>
+            <MessageSquare size={11} /> {card.comments}
+          </span>
+        ) : null}
       </div>
-      <span style={{
-        fontSize: '13px', fontWeight: '500', flex: 1,
-        color: done ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.85)',
-        textDecoration: done ? 'line-through' : 'none',
-      }}>{label}</span>
     </div>
   );
 }
 
-/* ── Icon Box ── */
-function IconBox({ icon, color }: { icon: React.ReactNode; color: string }) {
+function BoardPreview() {
+  // The single moving card alternates columns to demonstrate live sync.
+  const [shipped, setShipped] = useState(false);
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const id = setInterval(() => setShipped((v) => !v), 2600);
+    return () => clearInterval(id);
+  }, []);
+
+  const columns: Array<{ key: string; label: string; tint: string; cards: DemoCard[] }> = [
+    { key: "todo", label: "To Do", tint: "var(--ink-faint)", cards: TODO },
+    {
+      key: "prog",
+      label: "In Progress",
+      tint: "var(--accent)",
+      cards: shipped ? [] : PROGRESS,
+    },
+    {
+      key: "done",
+      label: "Done",
+      tint: "var(--success)",
+      cards: shipped ? [...PROGRESS, ...DONE] : DONE,
+    },
+  ];
+
   return (
-    <div style={{
-      width: '44px', height: '44px', borderRadius: '12px', marginBottom: '20px',
-      background: color, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      flexShrink: 0,
-    }}>{icon}</div>
+    <div
+      style={{
+        background: "var(--canvas)",
+        border: "1px solid var(--line)",
+        borderRadius: "var(--r-xl)",
+        boxShadow: "var(--shadow-xl)",
+        overflow: "hidden",
+      }}
+    >
+      {/* Window chrome */}
+      <div
+        style={{
+          display: "flex", alignItems: "center", gap: 10,
+          padding: "13px 16px",
+          borderBottom: "1px solid var(--line)",
+          background: "var(--surface)",
+        }}
+      >
+        <div style={{ display: "flex", gap: 6 }} aria-hidden>
+          {["#e4e0da", "#e4e0da", "#e4e0da"].map((c, i) => (
+            <span key={i} style={{ width: 9, height: 9, borderRadius: "50%", background: c }} />
+          ))}
+        </div>
+        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-secondary)", marginLeft: 4 }}>
+          Product · Board
+        </span>
+        <span
+          style={{
+            marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6,
+            fontSize: 11, fontWeight: 600, color: "var(--success)",
+          }}
+        >
+          <span style={{ position: "relative", display: "grid", placeItems: "center", width: 7, height: 7 }}>
+            <span style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "var(--success)", animation: "ping 2s var(--ease-out-expo) infinite" }} />
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--success)" }} />
+          </span>
+          Live
+        </span>
+      </div>
+
+      {/* Columns */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, 1fr)",
+          gap: 12,
+          padding: 14,
+          minHeight: 268,
+          alignItems: "start",
+        }}
+      >
+        {columns.map((col) => (
+          <div key={col.key}>
+            <div
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                paddingBottom: 8, marginBottom: 10,
+                borderBottom: `2px solid ${col.tint}`,
+              }}
+            >
+              <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--ink-secondary)" }}>
+                {col.label}
+              </span>
+              <span className="num" style={{ fontSize: 11, fontWeight: 700, color: "var(--ink-faint)" }}>
+                {col.cards.length}
+              </span>
+            </div>
+            <div style={{ display: "grid", gap: 8 }}>
+              {col.cards.map((c) => (
+                <Card key={c.id} card={c} moving={shipped && c.id === "p1"} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
-/* ══════════════════════════════════════════════════════════
-   MAIN COMPONENT
-══════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+   PAGE
+   ═══════════════════════════════════════════════════════════════ */
+
 export default function LandingPage() {
-  const { token, user } = useAuth();
   const router = useRouter();
+  const { token, user } = useAuth();
   const [showLogin, setShowLogin] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
-  // The auth token is restored from localStorage on the client only. Gating the
-  // logged-in UI behind `mounted` keeps the first client render identical to the
-  // server render (logged-out), then switches once hydration is done — this
-  // avoids React hydration mismatches while still reflecting the real state.
-  useEffect(() => { setMounted(true); }, []);
-  const loggedIn = mounted && !!token;
+  useReveal();
+  useScrollProgress();
+
+  // Auth lives in localStorage, so it is only known on the client. Gating the
+  // signed-in UI on `mounted` keeps the first client paint identical to the
+  // server's and avoids a hydration mismatch.
+  useEffect(() => setMounted(true), []);
+  const signedIn = mounted && !!token;
 
   const initials = user?.name
-    ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
-    : user?.username?.slice(0, 2).toUpperCase() || '?';
+    ? user.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
+    : user?.username?.slice(0, 2).toUpperCase() ?? "";
 
-  const sectionIntegrations = useInView();
-  const sectionFeatures = useInView();
-  const sectionSteps = useInView();
-  const sectionTestimonials = useInView();
-  const sectionPricing = useInView();
-  const sectionTech = useInView();
-  const sectionCta = useInView();
+  const start = () => (token ? router.push("/projects") : setShowLogin(true));
 
-  const go = () => token ? router.push('/projects') : setShowLogin(true);
-  const navLinks = ['Features', 'How It Works', 'Testimonials'];
+  const sections = [
+    { id: "how", label: "How it works" },
+    { id: "features", label: "Features" },
+    { id: "stack", label: "Built with" },
+  ];
 
   return (
-    <div className="lp-root" style={{ background: '#111111', color: '#ffffff', minHeight: '100vh', overflowX: 'hidden' }}>
-      <style dangerouslySetInnerHTML={{ __html: STYLES }} />
+    <div style={{ background: "var(--canvas)", minHeight: "100vh", overflowX: "hidden" }}>
+      <style>{`
+        /* ── Page-scoped layout & motion ─────────────────────── */
+        .lp-nav-wrap {
+          position: fixed; inset: 0 0 auto; z-index: 200;
+          border-bottom: 1px solid transparent;
+          transition: border-color var(--t-base) linear, background var(--t-base) linear;
+        }
+        .lp-nav-wrap[data-stuck="true"] {
+          border-bottom-color: var(--line);
+          background: rgba(251,250,248,0.82);
+          -webkit-backdrop-filter: blur(16px) saturate(180%);
+          backdrop-filter: blur(16px) saturate(180%);
+        }
+        .lp-nav {
+          max-width: 1180px; margin: 0 auto; padding: 0 32px;
+          height: 68px; display: flex; align-items: center; gap: 28px;
+        }
+        .lp-navlinks { display: flex; gap: 26px; margin-left: 12px; }
+        .lp-navlink {
+          font-size: 13.5px; font-weight: 500; color: var(--ink-secondary);
+          text-decoration: none; transition: color var(--t-fast) linear;
+        }
+        .lp-navlink:hover { color: var(--ink); }
+        .lp-navcta { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+        .lp-burger { display: none; }
 
-      {/* ════════════════ NAVBAR ════════════════ */}
-      <header style={{
-        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 200,
-        background: 'rgba(17,17,17,0.85)',
-        backdropFilter: 'blur(16px)',
-        borderBottom: '1px solid rgba(255,255,255,0.05)',
-      }}>
-        <div className="lp-nav">
-          {/* Left: Logo */}
-          <div className="lp-nav-logo">
-            <span style={{
-              fontSize: '20px', fontWeight: '900', letterSpacing: '-0.04em',
-              background: 'linear-gradient(135deg, #f97316, #fb923c)',
-              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
-              cursor: 'pointer',
-            }} onClick={() => window.scrollTo(0,0)}>Pulse</span>
-          </div>
+        /* Hero */
+        .lp-hero {
+          padding: 168px 0 0;
+          position: relative;
+        }
+        .lp-hero-grid {
+          display: grid; grid-template-columns: 1.05fr 0.95fr;
+          gap: 56px; align-items: end;
+        }
+        /* Parallax: driven by the --scroll variable that useScrollProgress
+           publishes, so nothing re-renders per frame. */
+        .lp-parallax {
+          transform: translate3d(0, calc(var(--scroll, 0) * -0.035px), 0);
+          will-change: transform;
+        }
+        .lp-preview-wrap { margin-top: 68px; position: relative; }
 
-          {/* Center: Nav links */}
-          <nav className="lp-nav-links">
-            {navLinks.map(label => (
-              <a key={label} className="lp-nav-link"
-                href={`#${label.toLowerCase().replace(/\s+/g, '-')}`}>
-                {label}
-              </a>
-            ))}
-          </nav>
+        /* Decorative wash behind the hero */
+        .lp-wash {
+          position: absolute; pointer-events: none; z-index: 0;
+          width: 760px; height: 520px; top: -80px; left: 50%;
+          transform: translateX(-50%);
+          background: radial-gradient(ellipse at center, rgba(234,88,12,0.10), transparent 68%);
+          filter: blur(8px);
+          animation: drift 13s var(--ease-in-out) infinite;
+        }
 
-          {/* Right: Actions */}
-          <div className="lp-nav-actions">
-            {loggedIn ? (
-              <>
-                {/* Logged-in: account badge + dashboard link */}
-                <button
-                  className="lp-login-btn"
-                  onClick={() => router.push('/profile')}
-                  title="Profile & settings"
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '8px',
-                    background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
-                    color: '#fff', borderRadius: '100px', padding: '4px 14px 4px 4px',
-                    cursor: 'pointer', fontFamily: 'inherit',
-                  }}
-                >
-                  <span style={{
-                    width: '26px', height: '26px', borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #f97316, #fb923c)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '11px', fontWeight: '800', color: '#fff',
-                  }}>{initials}</span>
-                  <span style={{ fontSize: '13px', fontWeight: '600' }}>{user?.username || 'Account'}</span>
+        /* Marquee */
+        .lp-marquee {
+          display: flex; overflow: hidden; gap: 0;
+          border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+          padding: 17px 0; margin-top: 104px;
+          -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+          mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+        }
+        .lp-marquee-track {
+          display: flex; flex-shrink: 0; gap: 40px; padding-right: 40px;
+          animation: marquee 34s linear infinite;
+        }
+        .lp-marquee:hover .lp-marquee-track { animation-play-state: paused; }
+        .lp-chip {
+          display: inline-flex; align-items: center; gap: 9px; white-space: nowrap;
+          font-size: 13px; font-weight: 500; color: var(--ink-secondary);
+        }
+
+        /* Sections */
+        .lp-sec { padding: 116px 0; }
+        .lp-sec-head { max-width: 640px; margin-bottom: 64px; }
+
+        /* Feature rows — editorial, not a card grid */
+        .lp-feat {
+          display: grid; grid-template-columns: 88px 1fr 300px;
+          gap: 40px; align-items: start;
+          padding: 44px 0; border-top: 1px solid var(--line);
+        }
+        .lp-feat-n {
+          font-family: var(--font-display), Georgia, serif;
+          font-size: 40px; line-height: 1; color: var(--ink-faint);
+        }
+        .lp-points { display: grid; gap: 10px; }
+        .lp-point {
+          display: flex; gap: 9px; align-items: flex-start;
+          font-size: 13.5px; color: var(--ink-secondary);
+        }
+
+        /* Steps */
+        .lp-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; }
+        .lp-step { background: var(--surface); padding: 34px 30px; transition: background var(--t-base) linear; }
+        .lp-step:hover { background: var(--surface-hover); }
+
+        /* Stack */
+        .lp-stack { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+        .lp-stack-item {
+          padding: 22px; border: 1px solid var(--line); border-radius: var(--r-md);
+          background: var(--surface);
+        }
+
+        /* Roles table */
+        .lp-roles { width: 100%; border-collapse: collapse; font-size: 14px; }
+        .lp-roles th, .lp-roles td { text-align: left; padding: 15px 16px; border-bottom: 1px solid var(--line); }
+        .lp-roles th { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-tertiary); font-weight: 600; }
+        .lp-roles td:first-child { font-weight: 600; }
+        .lp-roles tr:last-child td { border-bottom: none; }
+
+        /* CTA */
+        .lp-cta {
+          border: 1px solid var(--line); border-radius: var(--r-xl);
+          padding: 76px 48px; text-align: center; position: relative; overflow: hidden;
+          background:
+            radial-gradient(ellipse at 50% 0%, rgba(234,88,12,0.09), transparent 62%),
+            var(--surface);
+        }
+
+        /* Footer */
+        .lp-footer { border-top: 1px solid var(--line); padding: 44px 0 56px; }
+
+        /* ── Responsive ─────────────────────────────────────── */
+        @media (max-width: 1024px) {
+          .lp-hero-grid { grid-template-columns: 1fr; gap: 40px; align-items: start; }
+          .lp-feat { grid-template-columns: 60px 1fr; }
+          .lp-feat > .lp-points { grid-column: 2; }
+          .lp-stack { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 768px) {
+          .lp-nav { padding: 0 18px; height: 62px; gap: 14px; }
+          .lp-navlinks { display: none; }
+          .lp-burger { display: inline-flex; }
+          .lp-navcta .lp-hide-sm { display: none; }
+          .lp-hero { padding-top: 122px; }
+          .lp-sec { padding: 78px 0; }
+          .lp-sec-head { margin-bottom: 40px; }
+          .lp-steps { grid-template-columns: 1fr; }
+          .lp-stack { grid-template-columns: 1fr; }
+          .lp-feat { grid-template-columns: 1fr; gap: 18px; padding: 34px 0; }
+          .lp-feat > .lp-points { grid-column: 1; }
+          .lp-feat-n { font-size: 30px; }
+          .lp-cta { padding: 52px 24px; }
+          .lp-marquee { margin-top: 64px; }
+          .lp-preview-wrap { margin-top: 44px; }
+        }
+      `}</style>
+
+      {/* ════════ NAV ════════ */}
+      <Nav
+        sections={sections}
+        signedIn={signedIn}
+        initials={initials}
+        username={user?.username}
+        menuOpen={menuOpen}
+        setMenuOpen={setMenuOpen}
+        onStart={start}
+        router={router}
+      />
+
+      {/* ════════ HERO ════════ */}
+      <header className="lp-hero">
+        <div className="lp-wash" aria-hidden />
+        <div className="shell" style={{ position: "relative", zIndex: 1 }}>
+          <div className="lp-hero-grid">
+            <div>
+              <div
+                data-reveal="fade"
+                style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 26 }}
+              >
+                <span style={{ width: 28, height: 1, background: "var(--accent)" }} />
+                <span className="eyebrow">Real-time project boards</span>
+              </div>
+
+              {/* Line-masked display heading */}
+              <h1
+                className="display t-hero"
+                data-reveal="fade"
+                style={{ marginBottom: 26 }}
+              >
+                <span className="line-mask"><span style={{ ["--i" as string]: 0 }}>Move the work,</span></span>
+                <span className="line-mask">
+                  <span style={{ ["--i" as string]: 1 }}>
+                    not the <em className="display-italic" style={{ color: "var(--accent-strong)" }}>status meeting</em>.
+                  </span>
+                </span>
+              </h1>
+
+              <p className="lede" data-reveal style={{ ["--i" as string]: 1, marginBottom: 34 }}>
+                Pulse is a Kanban workspace where a card you drag lands on your
+                teammate&apos;s screen the same second. Priorities, assignees,
+                comments and a full activity trail — without the ceremony.
+              </p>
+
+              <div
+                data-reveal
+                style={{ ["--i" as string]: 2, display: "flex", flexWrap: "wrap", gap: 12 }}
+              >
+                <button className="btn btn-accent btn-lg" onClick={start}>
+                  {signedIn ? "Open your dashboard" : "Create a board"}
                 </button>
-                <button className="lp-btn-orange" onClick={() => router.push('/projects')} style={{
-                  fontSize: '13px', padding: '8px 18px', borderRadius: '10px',
-                }}>
-                  Open Dashboard
-                </button>
-              </>
-            ) : (
-              <>
-                <button className="lp-login-btn" onClick={go} style={{
-                  background: 'none', border: 'none', color: 'rgba(255,255,255,0.55)',
-                  fontSize: '14px', fontWeight: '500', cursor: 'pointer', padding: '8px 16px',
-                  fontFamily: 'inherit',
-                }}>Log in</button>
-                <button className="lp-btn-orange" onClick={go} style={{
-                  fontSize: '13px', padding: '8px 18px', borderRadius: '10px',
-                }}>
-                  Get Started
-                </button>
-              </>
-            )}
-            {/* Hamburger (Mobile/Tablet only) */}
-            <button className="lp-hamburger" onClick={() => setMenuOpen(v => !v)}>
-              {menuOpen ? <X size={24} /> : <Menu size={24} />}
-            </button>
-          </div>
-        </div>
-
-        {/* Mobile menu */}
-        {menuOpen && (
-          <div style={{
-            background: '#1a1a1a', borderTop: '1px solid rgba(255,255,255,0.06)',
-            padding: '16px 28px', display: 'flex', flexDirection: 'column', gap: '4px',
-          }}>
-            {navLinks.map(label => (
-              <a key={label}
-                href={`#${label.toLowerCase().replace(/\s+/g, '-')}`}
-                onClick={() => setMenuOpen(false)}
-                style={{
-                  padding: '12px 0', fontSize: '15px', fontWeight: '500',
-                  color: 'rgba(255,255,255,0.7)', textDecoration: 'none',
-                  borderBottom: '1px solid rgba(255,255,255,0.05)',
-                }}
-              >{label}</a>
-            ))}
-            {loggedIn ? (
-              <>
-                <button className="lp-btn-orange" onClick={() => { setMenuOpen(false); router.push('/projects'); }}
-                  style={{ marginTop: '16px', padding: '12px', justifyContent: 'center' }}>
-                  Open Dashboard
-                </button>
-                <button className="lp-btn-ghost" onClick={() => { setMenuOpen(false); router.push('/profile'); }}
-                  style={{ marginTop: '8px', padding: '12px', justifyContent: 'center', border: 'none' }}>
-                  {user?.username ? `Signed in as ${user.username}` : 'Profile'}
-                </button>
-              </>
-            ) : (
-              <>
-                <button className="lp-btn-orange" onClick={() => { setMenuOpen(false); go(); }}
-                  style={{ marginTop: '16px', padding: '12px', justifyContent: 'center' }}>
-                  Get Started Free
-                </button>
-                <button className="lp-btn-ghost" onClick={() => { setMenuOpen(false); go(); }}
-                  style={{ marginTop: '8px', padding: '12px', justifyContent: 'center', border: 'none' }}>
-                  Log in
-                </button>
-              </>
-            )}
-          </div>
-        )}
-      </header>
-
-      {/* ════════════════ HERO ════════════════ */}
-      <section style={{
-        minHeight: '100vh', paddingTop: '58px',
-        display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-        padding: '100px 24px 80px',
-        position: 'relative', overflow: 'hidden',
-      }}>
-        {/* Abstract Grid BG */}
-        <div style={{
-          position: 'absolute', inset: 0, opacity: 0.2,
-          backgroundImage: `
-            linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)`,
-          backgroundSize: '100px 100px',
-          pointerEvents: 'none',
-        }} />
-        {/* Glow orbs */}
-        <div className="lp-orb-1" style={{
-          position: 'absolute', width: '800px', height: '500px', pointerEvents: 'none',
-          background: 'radial-gradient(ellipse, rgba(249,115,22,0.06) 0%, transparent 60%)',
-          top: '0%', left: '50%', transform: 'translateX(-50%)',
-        }} />
-        <div className="lp-orb-2" style={{
-          position: 'absolute', width: '500px', height: '500px', borderRadius: '50%', pointerEvents: 'none',
-          background: 'radial-gradient(circle, rgba(99,102,241,0.05) 0%, transparent 60%)',
-          bottom: '10%', right: '-10%',
-        }} />
-
-        <div className="lp-hero-content">
-          {/* Badge */}
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: '8px',
-            padding: '8px 18px', borderRadius: '100px',
-            background: 'rgba(249,115,22,0.1) ',
-            border: '1px solid rgba(249,115,22,0.2)',
-            fontSize: '13px', fontWeight: '600', color: '#fb923c',
-            marginBottom: '32px', letterSpacing: '0.01em',
-          }}>
-            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#f97316', display: 'inline-block' }} />
-            Pulse 2.0 is now live
-          </div>
-
-          <h1 style={{
-            fontSize: 'clamp(42px, 7vw, 84px)',
-            fontWeight: '900', lineHeight: '1.05',
-            letterSpacing: '-0.04em', marginBottom: '24px',
-            textShadow: '0 20px 40px rgba(0,0,0,0.5)',
-          }}>
-            Manage projects the{' '}
-            <span style={{ color: '#f97316', display: 'inline-block' }}>smart way</span>
-          </h1>
-
-          <p style={{
-            fontSize: 'clamp(16px, 2.2vw, 20px)',
-            color: 'rgba(255,255,255,0.5)',
-            maxWidth: '560px', margin: '0 auto 40px',
-            lineHeight: '1.6',
-          }}>
-            Pulse gives your team a real-time Kanban workspace. Drag tasks, 
-            track velocity, and collaborate — all in one clean dashboard.
-          </p>
-
-          <div className="lp-hero-btns" style={{ marginBottom: '80px' }}>
-            <button className="lp-btn-orange" onClick={go} style={{ padding: '16px 32px', fontSize: '16px' }}>
-              {token ? 'Open Dashboard' : 'Start for free'}
-              <ArrowRight size={18} />
-            </button>
-            <a href="#features" className="lp-btn-ghost" style={{ padding: '16px 32px', fontSize: '16px' }}>
-              See how it works <ChevronRight size={18} />
-            </a>
-          </div>
-
-          {/* ── Dashboard Bento Preview ── */}
-          <div style={{
-            background: '#161616',
-            borderRadius: '24px',
-            border: '1px solid rgba(255,255,255,0.08)',
-            padding: '20px',
-            boxShadow: '0 40px 100px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.02) inset',
-            width: '100%',
-          }}>
-            {/* Window dots */}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', paddingLeft: '8px', paddingTop: '4px' }}>
-              {['#ff5f57', '#febc2e', '#28c840'].map(c => (
-                <div key={c} style={{ width: '12px', height: '12px', borderRadius: '50%', background: c }} />
-              ))}
+                <a href="#how" className="btn btn-secondary btn-lg" style={{ textDecoration: "none" }}>
+                  See how it works
+                </a>
+              </div>
             </div>
 
-            <div className="lp-bento-main">
-              {/* Kanban board */}
-              <div className="lp-bento-kanban lp-card lp-card-dark" style={{ textAlign: 'left', animation: 'fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.2s backwards' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                  <span style={{ fontSize: '14px', fontWeight: '600', color: 'rgba(255,255,255,0.7)' }}>Board — Sprint 12</span>
-                  <div style={{ display: 'flex', gap: '4px' }}>
-                    {[0,1,2].map(i => <div key={i} style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)' }} />)}
-                  </div>
-                </div>
-                <div className="lp-kanban-cols">
-                  {[
-                    { title: 'To Do', color: 'rgba(255,255,255,0.2)', tasks: ['Design hero section', 'Write copy'] },
-                    { title: 'In Progress', color: '#f97316', tasks: ['API integration', 'Auth flow'] },
-                    { title: 'Done', color: '#10b981', tasks: ['Setup CI/CD', 'DB schema'] },
-                  ].map(col => (
-                    <div key={col.title}>
-                      <div style={{
-                        fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.4)',
-                        textTransform: 'uppercase', letterSpacing: '0.08em',
-                        marginBottom: '10px', paddingBottom: '8px',
-                        borderBottom: `2px solid ${col.color}`,
-                      }}>{col.title}</div>
-                      {col.tasks.map((t, j) => (
-                        <div key={j} style={{
-                          background: 'rgba(255,255,255,0.03)',
-                          border: '1px solid rgba(255,255,255,0.05)',
-                          borderRadius: '8px', padding: '10px 12px', marginBottom: '6px',
-                        }}>
-                          <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.75)', marginBottom: '6px', fontWeight: '500' }}>{t}</div>
-                          <div style={{ width: '24px', height: '4px', borderRadius: '2px', background: col.color + '60' }} />
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Velocity metric */}
-              <div className="lp-bento-metric lp-card lp-card-orange" style={{ textAlign: 'left', animation: 'fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.3s backwards' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
-                  <div>
-                    <div style={{ fontSize: '12px', fontWeight: '700', color: 'rgba(255,255,255,0.65)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Velocity</div>
-                    <div style={{ fontSize: '46px', fontWeight: '900', lineHeight: 1, letterSpacing: '-0.03em' }}>
-                      94<span style={{ fontSize: '20px', fontWeight: '600' }}>pts</span>
-                    </div>
-                  </div>
-                  <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: '12px', padding: '10px' }}>
-                    <TrendingUp size={20} color="white" />
-                  </div>
-                </div>
-                {/* Bar chart */}
-                <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-end', height: '60px' }}>
-                  {[55, 70, 50, 80, 65, 90, 75, 94].map((h, i) => (
-                    <div key={i} style={{
-                      flex: 1, background: i < 7 ? 'rgba(255,255,255,0.25)' : 'white',
-                      borderRadius: '4px 4px 0 0', height: `${(h / 100) * 60}px`,
-                    }} />
-                  ))}
-                </div>
-                <div style={{ marginTop: '12px', fontSize: '13px', color: 'rgba(255,255,255,0.8)', fontWeight: '600' }}>
-                  ↑ 18% vs last sprint
-                </div>
-              </div>
-
-              {/* Active tasks */}
-              <div className="lp-bento-tasks lp-card lp-card-dark" style={{ textAlign: 'left', animation: 'fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.4s backwards' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                  <span style={{ fontSize: '14px', fontWeight: '600', color: 'rgba(255,255,255,0.6)' }}>Active Tasks</span>
-                  <div style={{ background: '#f97316', borderRadius: '6px', padding: '4px 10px', fontSize: '11px', fontWeight: '700', color: 'white' }}>3 open</div>
-                </div>
-                <TaskPill label="Implement drag-and-drop" done={false} color="#f97316" />
-                <TaskPill label="Add socket events" done={true} color="#10b981" />
-                <TaskPill label="Write API docs" done={false} color="#6366f1" />
-              </div>
-
-              {/* Team activity */}
-              <div className="lp-bento-activity lp-card lp-card-dark" style={{ textAlign: 'left', animation: 'fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.5s backwards' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                  <span style={{ fontSize: '14px', fontWeight: '600', color: 'rgba(255,255,255,0.6)' }}>Team Activity</span>
-                  <div style={{ display: 'flex' }}>
-                    {['#f97316', '#6366f1', '#10b981', '#fbbf24'].map((c, i) => (
-                      <div key={i} style={{
-                        width: '28px', height: '28px', borderRadius: '50%',
-                        background: c, border: '2px solid #1c1c1e',
-                        marginLeft: i > 0 ? '-8px' : '0',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: '10px', fontWeight: '800', color: 'white',
-                      }}>{'ASRM'[i]}</div>
-                    ))}
-                  </div>
-                </div>
+            {/* Honest, self-describing side panel — no metrics claimed */}
+            <aside data-reveal="right" style={{ ["--i" as string]: 2 }}>
+              <div style={{ borderLeft: "1px solid var(--line)", paddingLeft: 26, display: "grid", gap: 24 }}>
                 {[
-                  { user: 'Alex', action: 'moved task to Done', time: '2m', color: '#f97316' },
-                  { user: 'Sara', action: 'added a comment', time: '8m', color: '#6366f1' },
-                  { user: 'Raj', action: 'created Sprint 13', time: '15m', color: '#10b981' },
-                ].map((item, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                    <div style={{
-                      width: '30px', height: '30px', borderRadius: '50%', flexShrink: 0,
-                      background: item.color + '15', border: `1px solid ${item.color}30`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '11px', fontWeight: '800', color: item.color,
-                    }}>{item.user[0]}</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ fontSize: '13px', fontWeight: '700', color: 'rgba(255,255,255,0.85)' }}>{item.user} </span>
-                      <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)' }}>{item.action}</span>
+                  { icon: <Zap size={15} />, t: "Websocket updates", d: "Changes broadcast to everyone on the board." },
+                  { icon: <Users size={15} />, t: "Three access levels", d: "Owner, Editor and Viewer — enforced by the API." },
+                  { icon: <Clock size={15} />, t: "Activity history", d: "Every create, move and delete is recorded." },
+                ].map((r) => (
+                  <div key={r.t} style={{ display: "flex", gap: 13 }}>
+                    <span style={{ color: "var(--accent-strong)", marginTop: 2, flexShrink: 0 }}>{r.icon}</span>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 3 }}>{r.t}</div>
+                      <div style={{ fontSize: 13, color: "var(--ink-tertiary)", lineHeight: 1.55 }}>{r.d}</div>
                     </div>
-                    <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.25)', flexShrink: 0 }}>{item.time} ago</span>
                   </div>
                 ))}
               </div>
-            </div>
+            </aside>
+          </div>
+
+          {/* Product preview */}
+          <div className="lp-preview-wrap lp-parallax" data-reveal="scale" style={{ ["--i" as string]: 3 }}>
+            <BoardPreview />
           </div>
         </div>
-      </section>
 
-      {/* ════════════════ FEATURES ════════════════ */}
-      <section id="features" ref={sectionFeatures.ref} className="lp-section lp-divider">
-        <div className="lp-container">
-          {/* Heading */}
-          <div style={{
-            marginBottom: '48px',
-            opacity: sectionFeatures.visible ? 1 : 0,
-            transform: sectionFeatures.visible ? 'translateY(0)' : 'translateY(24px)',
-            transition: 'all 0.6s ease-out',
-          }}>
-            <div style={{ fontSize: '13px', fontWeight: '700', color: '#f97316', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '14px' }}>Features</div>
-            <h2 className="lp-section-title" style={{
-              fontSize: 'clamp(32px, 4vw, 48px)',
-              fontWeight: '900', letterSpacing: '-0.03em', lineHeight: '1.08', maxWidth: '600px',
-            }}>
-              Everything your team needs to ship faster
+        {/* Capability marquee — real features only */}
+        <div className="lp-marquee" aria-hidden>
+          {[0, 1].map((dup) => (
+            <div className="lp-marquee-track" key={dup}>
+              {CAPABILITIES.map((c) => (
+                <span className="lp-chip" key={`${dup}-${c}`}>
+                  <span style={{ width: 4, height: 4, borderRadius: "50%", background: "var(--accent)" }} />
+                  {c}
+                </span>
+              ))}
+            </div>
+          ))}
+        </div>
+      </header>
+
+      {/* ════════ HOW IT WORKS ════════ */}
+      <section id="how" className="lp-sec">
+        <div className="shell">
+          <div className="lp-sec-head">
+            <span className="eyebrow" data-reveal="fade">How it works</span>
+            <h2 className="display t-section" data-reveal style={{ marginTop: 14 }}>
+              Three steps, then you&apos;re working.
             </h2>
           </div>
 
-          {/* Feature Bento */}
-          <div className="lp-features-bento" style={{
-            opacity: sectionFeatures.visible ? 1 : 0,
-            transition: 'opacity 0.8s ease-out 0.2s',
-          }}>
-            {/* 1 — Large orange Kanban */}
-            <div className="lp-feat-1 lp-card lp-card-orange" style={{ padding: '40px' }}>
-              <IconBox icon={<Columns3 size={24} color="white" />} color="rgba(255,255,255,0.2)" />
-              <h3 style={{ fontSize: '24px', fontWeight: '800', marginBottom: '12px' }}>Kanban Boards</h3>
-              <p style={{ fontSize: '16px', color: 'rgba(255,255,255,0.8)', lineHeight: '1.65', maxWidth: '440px' }}>
-                Drag-and-drop tasks across To Do, In Progress, and Done. 
-                Customizable columns with real-time sync across your whole team.
-              </p>
-            </div>
-
-            {/* 2 — Real-time */}
-            <div className="lp-feat-2 lp-card lp-card-dark lp-card-hover" style={{ padding: '36px' }}>
-              <IconBox icon={<Zap size={22} color="#818cf8" />} color="rgba(99,102,241,0.15)" />
-              <h3 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Real-Time Sync</h3>
-              <p style={{ fontSize: '15px', color: 'rgba(255,255,255,0.4)', lineHeight: '1.6', margin: 0 }}>
-                WebSocket-powered. Every change appears instantly for all team members.
-              </p>
-            </div>
-
-            {/* 3 — Secure */}
-            <div className="lp-feat-3 lp-card lp-card-dark lp-card-hover" style={{ padding: '36px' }}>
-              <IconBox icon={<Shield size={22} color="#34d399" />} color="rgba(16,185,129,0.15)" />
-              <h3 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Secure by Default</h3>
-              <p style={{ fontSize: '15px', color: 'rgba(255,255,255,0.4)', lineHeight: '1.6', margin: 0 }}>
-                JWT + bcrypt hashing. Your data is encrypted and safe, always.
-              </p>
-            </div>
-
-            {/* 4 — Analytics */}
-            <div className="lp-feat-4 lp-card lp-card-dark lp-card-hover" style={{ padding: '36px' }}>
-              <IconBox icon={<BarChart3 size={22} color="#fbbf24" />} color="rgba(251,191,36,0.15)" />
-              <h3 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Analytics</h3>
-              <p style={{ fontSize: '15px', color: 'rgba(255,255,255,0.4)', lineHeight: '1.6', margin: 0 }}>
-                Completion rates, team velocity, and task distribution — all built in.
-              </p>
-            </div>
-
-            {/* 5 — Team (Now consistently styled like 2,3,4) */}
-            <div className="lp-feat-5 lp-card lp-card-dark lp-card-hover" style={{ padding: '36px' }}>
-              <IconBox icon={<Users size={22} color="#f97316" />} color="rgba(249,115,22,0.15)" />
-              <h3 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '10px' }}>Team Workspace</h3>
-              <p style={{ fontSize: '15px', color: 'rgba(255,255,255,0.4)', lineHeight: '1.6', margin: 0 }}>
-                Multiple boards, starred favorites, roles — built for teams of any size.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ════════════════ HOW IT WORKS ════════════════ */}
-      <section id="how-it-works" ref={sectionSteps.ref} className="lp-section lp-divider">
-        <div className="lp-container-sm">
-          <div style={{
-            marginBottom: '56px', textAlign: 'center',
-            opacity: sectionSteps.visible ? 1 : 0,
-            transform: sectionSteps.visible ? 'translateY(0)' : 'translateY(24px)',
-            transition: 'all 0.6s ease-out',
-          }}>
-            <div style={{ fontSize: '13px', fontWeight: '700', color: '#f97316', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '14px' }}>How It Works</div>
-            <h2 className="lp-section-title" style={{
-              fontSize: 'clamp(32px, 4vw, 48px)',
-              fontWeight: '900', letterSpacing: '-0.03em', lineHeight: '1.08',
-            }}>
-              Up and running in minutes
-            </h2>
-            <p style={{ fontSize: '17px', color: 'rgba(255,255,255,0.4)', marginTop: '16px', lineHeight: '1.6', maxWidth: '440px', margin: '16px auto 0' }}>
-              No complicated onboarding. Three simple steps to go from sign-up to shipping your first project.
-            </p>
-          </div>
-
-          <div className="lp-steps-grid" style={{
-            opacity: sectionSteps.visible ? 1 : 0,
-            transition: 'opacity 0.8s ease-out 0.2s',
-          }}>
-            {[
-              { num: '01', title: 'Create an account', desc: 'Sign up with your email. Less than 30 seconds, no card required.', accent: '#f97316' },
-              { num: '02', title: 'Set up your board', desc: 'Create a project, add tickets, and organize across custom columns.', accent: '#818cf8' },
-              { num: '03', title: 'Track & ship', desc: 'Drag tasks to completion. Watch team velocity grow with built-in analytics.', accent: '#34d399' },
-            ].map((step, i) => (
-              <div key={step.num} className="lp-card lp-card-dark" style={{
-                padding: '40px 32px',
-                borderTop: `4px solid ${step.accent}`,
-                textAlign: 'center',
-                opacity: sectionSteps.visible ? 1 : 0,
-                transform: sectionSteps.visible ? 'translateY(0)' : 'translateY(20px)',
-                transition: 'all 0.5s ease-out',
-                transitionDelay: `${i * 0.12}s`,
-              }}>
-                <div style={{
-                  fontSize: '56px', fontWeight: '900', lineHeight: 1,
-                  color: step.accent, marginBottom: '24px', fontVariantNumeric: 'tabular-nums'
-                }}>{step.num}</div>
-                <h3 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '12px' }}>{step.title}</h3>
-                <p style={{ fontSize: '15px', color: 'rgba(255,255,255,0.4)', lineHeight: '1.65', margin: 0 }}>{step.desc}</p>
+          <div className="lp-steps" data-reveal>
+            {STEPS.map((s, i) => (
+              <div className="lp-step" key={s.k}>
+                <div className="num" style={{ fontSize: 12, fontWeight: 700, color: "var(--accent-strong)", marginBottom: 16 }}>
+                  0{i + 1}
+                </div>
+                <h3 style={{ fontSize: 17, fontWeight: 650, marginBottom: 9, letterSpacing: "-0.01em" }}>{s.k}</h3>
+                <p style={{ fontSize: 14, color: "var(--ink-secondary)", lineHeight: 1.62 }}>{s.d}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ════════════════ TESTIMONIALS ════════════════ */}
-      <section id="testimonials" ref={sectionTestimonials.ref} className="lp-section lp-divider">
-        <div className="lp-container">
-          <div style={{
-            marginBottom: '48px',
-            opacity: sectionTestimonials.visible ? 1 : 0,
-            transform: sectionTestimonials.visible ? 'translateY(0)' : 'translateY(24px)',
-            transition: 'all 0.6s ease-out',
-          }}>
-            <div style={{ fontSize: '13px', fontWeight: '700', color: '#f97316', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '14px' }}>Loved by teams</div>
-            <h2 className="lp-section-title" style={{
-              fontSize: 'clamp(32px, 4vw, 48px)',
-              fontWeight: '900', letterSpacing: '-0.03em', lineHeight: '1.08',
-            }}>Don't just take our word for it</h2>
+      {/* ════════ FEATURES ════════ */}
+      <section id="features" className="lp-sec" style={{ paddingTop: 0 }}>
+        <div className="shell">
+          <div className="lp-sec-head">
+            <span className="eyebrow" data-reveal="fade">What&apos;s inside</span>
+            <h2 className="display t-section" data-reveal style={{ marginTop: 14 }}>
+              Built around how boards <em className="display-italic">actually</em> get used.
+            </h2>
           </div>
 
-          <div className="lp-test-grid" style={{
-            opacity: sectionTestimonials.visible ? 1 : 0,
-            transition: 'opacity 0.8s ease-out 0.2s',
-          }}>
-            {[
-              {
-                text: "Pulse completely changed how our team works. It’s fast, incredibly intuitive, and doesn't get in your way like heavier tools do.",
-                author: "Sarah Jenkins", role: "Software Engineer", imgColor: "#818cf8"
-              },
-              {
-                text: "The real-time synchronization allows our distributed team to collaborate seamlessly. It feels magical during daily standups.",
-                author: "Marcus Chen", role: "Product Manager", imgColor: "#10b981"
-              },
-              {
-                text: "Finally, a project management tool that is beautifully designed. The dark mode is just perfect for long coding sessions.",
-                author: "Elena Rodriguez", role: "Frontend Developer", imgColor: "#f97316"
-              }
-            ].map((t, i) => (
-              <div key={i} className="lp-card lp-card-dark" style={{ padding: '32px' }}>
-                <div style={{ display: 'flex', gap: '4px', color: '#fbbf24', marginBottom: '16px' }}>
-                  {[...Array(5)].map((_, j) => <span key={j}>★</span>)}
-                </div>
-                <p style={{ fontSize: '15px', color: 'rgba(255,255,255,0.85)', lineHeight: '1.6', marginBottom: '24px' }}>
-                  "{t.text}"
-                </p>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{
-                    width: '36px', height: '36px', borderRadius: '50%', background: t.imgColor,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontWeight: '800', fontSize: '14px', color: 'white'
-                  }}>{t.author[0]}</div>
-                  <div>
-                    <div style={{ fontSize: '14px', fontWeight: '700', color: '#fff' }}>{t.author}</div>
-                    <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)' }}>{t.role}</div>
+          {FEATURES.map((f) => (
+            <article className="lp-feat" key={f.n} data-reveal>
+              <div className="lp-feat-n" aria-hidden>{f.n}</div>
+              <div>
+                <h3 className="t-card" style={{ fontWeight: 600, letterSpacing: "-0.02em", lineHeight: 1.25, marginBottom: 14 }}>
+                  {f.title}
+                </h3>
+                <p style={{ color: "var(--ink-secondary)", lineHeight: 1.7, maxWidth: "52ch" }}>{f.body}</p>
+              </div>
+              <div className="lp-points">
+                {f.points.map((p) => (
+                  <div className="lp-point" key={p}>
+                    <Check size={15} style={{ color: "var(--accent-strong)", flexShrink: 0, marginTop: 2 }} />
+                    <span>{p}</span>
                   </div>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </article>
+          ))}
         </div>
       </section>
 
-      {/* ════════════════ TECH STACK ════════════════ */}
-      <section id="tech-stack" ref={sectionTech.ref} className="lp-section lp-divider">
-        <div className="lp-container">
-          <div style={{
-            marginBottom: '48px',
-            opacity: sectionTech.visible ? 1 : 0,
-            transform: sectionTech.visible ? 'translateY(0)' : 'translateY(24px)',
-            transition: 'all 0.6s ease-out',
-          }}>
-            <div style={{ fontSize: '13px', fontWeight: '700', color: '#f97316', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '14px' }}>Tech Stack</div>
-            <h2 className="lp-section-title" style={{
-              fontSize: 'clamp(32px, 4vw, 48px)',
-              fontWeight: '900', letterSpacing: '-0.03em',
-            }}>Built with modern tech</h2>
+      {/* ════════ ROLES ════════ */}
+      <section className="lp-sec" style={{ paddingTop: 0 }}>
+        <div className="shell">
+          <div className="lp-sec-head">
+            <span className="eyebrow" data-reveal="fade">Access control</span>
+            <h2 className="display t-section" data-reveal style={{ marginTop: 14 }}>
+              Who can do what.
+            </h2>
           </div>
 
-          <div className="lp-tech-grid" style={{
-            opacity: sectionTech.visible ? 1 : 0,
-            transition: 'opacity 0.8s ease-out 0.2s',
-          }}>
-            {[
-              { name: 'Next.js', desc: 'React framework, SSR & SG.', color: '#ffffff' },
-              { name: 'NestJS', desc: 'Modular Node.js backend.', color: '#e0234e' },
-              { name: 'TypeScript', desc: 'End-to-end type safety.', color: '#3178C6' },
-              { name: 'Prisma', desc: 'Type-safe ORM.', color: '#5a67d8' },
-              { name: 'PostgreSQL', desc: 'Reliable relational DB.', color: '#336791' },
-              { name: 'Socket.io', desc: 'Real-time comms.', color: '#f97316' },
-              { name: 'Zustand', desc: 'Lightweight state management.', color: '#c9a84c' },
-              { name: 'dnd-kit', desc: 'Fluid drag & drop toolkit.', color: '#a78bfa' },
-            ].map((tech, i) => (
-              <div key={tech.name} className="lp-card lp-card-dark lp-card-hover" style={{ padding: '24px',
-                opacity: sectionTech.visible ? 1 : 0, transform: sectionTech.visible ? 'translateY(0)' : 'translateY(24px)', transition: `all 0.6s cubic-bezier(0.16, 1, 0.3, 1) ${0.1 + i * 0.05}s`
-              }}>
-                <div style={{ fontSize: '16px', fontWeight: '800', marginBottom: '6px', color: tech.color }}>{tech.name}</div>
-                <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)', lineHeight: '1.55' }}>{tech.desc}</div>
-              </div>
-            ))}
+          <div data-reveal style={{ border: "1px solid var(--line)", borderRadius: "var(--r-lg)", overflow: "hidden", background: "var(--surface)" }}>
+            <table className="lp-roles">
+              <thead>
+                <tr>
+                  <th>Role</th>
+                  <th>View board</th>
+                  <th>Create &amp; move tasks</th>
+                  <th>Manage project</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { r: "Owner", v: true, e: true, m: true },
+                  { r: "Editor", v: true, e: true, m: false },
+                  { r: "Viewer", v: true, e: false, m: false },
+                ].map((row) => (
+                  <tr key={row.r}>
+                    <td>{row.r}</td>
+                    {[row.v, row.e, row.m].map((ok, i) => (
+                      <td key={i}>
+                        {ok ? (
+                          <Check size={16} style={{ color: "var(--success)" }} aria-label="Yes" />
+                        ) : (
+                          <span aria-label="No" style={{ color: "var(--ink-faint)" }}>—</span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
-      </section>
 
-      {/* ════════════════ CTA ════════════════ */}
-      <section ref={sectionCta.ref} className="lp-divider" style={{
-        padding: '120px 24px', textAlign: 'center',
-        position: 'relative', overflow: 'hidden',
-      }}>
-        <div style={{
-          position: 'absolute', inset: 0, pointerEvents: 'none',
-          background: 'radial-gradient(ellipse 800px 400px at 50% 50%, rgba(249,115,22,0.08) 0%, transparent 70%)',
-        }} />
-        <div style={{
-          position: 'relative', maxWidth: '580px', margin: '0 auto',
-          opacity: sectionCta.visible ? 1 : 0,
-          transform: sectionCta.visible ? 'translateY(0)' : 'translateY(24px)',
-          transition: 'all 0.7s ease-out',
-        }}>
-          <h2 style={{
-            fontSize: 'clamp(36px, 5vw, 64px)',
-            fontWeight: '900', letterSpacing: '-0.04em', marginBottom: '20px',
-          }}>
-            Ready to ship faster?
-          </h2>
-          <p style={{
-            fontSize: '18px', color: 'rgba(255,255,255,0.45)',
-            marginBottom: '40px', lineHeight: '1.7',
-          }}>
-            Join thousands of teams using Pulse to organize their work. No credit card required.
+          <p style={{ fontSize: 13, color: "var(--ink-tertiary)", marginTop: 14, maxWidth: "62ch" }} data-reveal="fade">
+            Roles are checked on the server for every request, so a Viewer can&apos;t
+            change a board by calling the API directly.
           </p>
-          <div style={{ display: 'flex', gap: '14px', justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button className="lp-btn-orange" onClick={go} style={{ fontSize: '16px', padding: '16px 40px', borderRadius: '14px' }}>
-              {token ? 'Open Dashboard' : 'Get Started Free'}
-              <ArrowRight size={20} />
+        </div>
+      </section>
+
+      {/* ════════ STACK ════════ */}
+      <section id="stack" className="lp-sec" style={{ paddingTop: 0 }}>
+        <div className="shell">
+          <div className="lp-sec-head">
+            <span className="eyebrow" data-reveal="fade">Built with</span>
+            <h2 className="display t-section" data-reveal style={{ marginTop: 14 }}>
+              No mystery in the stack.
+            </h2>
+          </div>
+
+          <div className="lp-stack">
+            {STACK.map((s, i) => (
+              <div className="lp-stack-item lift" key={s.name} data-reveal style={{ ["--i" as string]: i % 3 }}>
+                <div style={{ fontSize: 15, fontWeight: 650, marginBottom: 5 }}>{s.name}</div>
+                <div style={{ fontSize: 13, color: "var(--ink-tertiary)" }}>{s.role}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ════════ CTA ════════ */}
+      <section className="lp-sec" style={{ paddingTop: 0 }}>
+        <div className="shell">
+          <div className="lp-cta" data-reveal="scale">
+            <h2 className="display t-section" style={{ marginBottom: 16 }}>
+              Start with one board.
+            </h2>
+            <p className="lede" style={{ margin: "0 auto 30px", textAlign: "center" }}>
+              Create a project, invite whoever needs to be there, and see the
+              board update as it happens.
+            </p>
+            <button className="btn btn-accent btn-lg" onClick={start}>
+              {signedIn ? "Open your dashboard" : "Get started"}
             </button>
           </div>
         </div>
       </section>
 
-      {/* ════════════════ FOOTER ════════════════ */}
-      <footer className="lp-divider" style={{ padding: '48px 32px' }}>
-        <div className="lp-footer-inner" style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          maxWidth: '1200px', margin: '0 auto',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span style={{
-              fontSize: '20px', fontWeight: '900', letterSpacing: '-0.04em',
-              background: 'linear-gradient(135deg, #f97316, #fb923c)',
-              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
-            }}>Pulse</span>
-            <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)' }} />
-            <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '13px', fontWeight: '500' }}>
-              Built with Next.js & NestJS
-            </span>
+      {/* ════════ FOOTER ════════ */}
+      <footer className="lp-footer">
+        <div
+          className="shell"
+          style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center", justifyContent: "space-between" }}
+        >
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+            <span className="display" style={{ fontSize: 21 }}>Pulse</span>
+            <span style={{ fontSize: 12.5, color: "var(--ink-tertiary)" }}>Real-time project boards</span>
           </div>
-          <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: '13px', margin: 0 }}>
-            © 2026 Pulse Inc. All rights reserved.
-          </p>
-          <div style={{ display: 'flex', gap: '20px' }}>
-            {['Twitter', 'GitHub', 'Terms', 'Privacy'].map(l => (
-              <a key={l} href="#" style={{ fontSize: '13px', fontWeight: '500', color: 'rgba(255,255,255,0.3)', textDecoration: 'none' }}>{l}</a>
+          <nav style={{ display: "flex", gap: 22 }}>
+            {sections.map((s) => (
+              <a key={s.id} href={`#${s.id}`} className="link" style={{ fontSize: 13, color: "var(--ink-secondary)" }}>
+                {s.label}
+              </a>
             ))}
-          </div>
+          </nav>
         </div>
       </footer>
 
+      {/* LoginModal performs the redirect to /projects itself once the token
+          is persisted, so this only needs to dismiss. */}
       <LoginModal
         isOpen={showLogin}
         onClose={() => setShowLogin(false)}
         onSuccess={() => setShowLogin(false)}
       />
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   NAV
+   ═══════════════════════════════════════════════════════════════ */
+
+function Nav({
+  sections, signedIn, initials, username, menuOpen, setMenuOpen, onStart, router,
+}: {
+  sections: Array<{ id: string; label: string }>;
+  signedIn: boolean;
+  initials: string;
+  username?: string;
+  menuOpen: boolean;
+  setMenuOpen: (v: boolean) => void;
+  onStart: () => void;
+  router: ReturnType<typeof useRouter>;
+}) {
+  const [stuck, setStuck] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setStuck(window.scrollY > 12);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  return (
+    <div className="lp-nav-wrap" data-stuck={stuck}>
+      <div className="lp-nav">
+        <a
+          href="#top"
+          onClick={(e) => { e.preventDefault(); window.scrollTo({ top: 0 }); }}
+          className="display"
+          style={{ fontSize: 23, textDecoration: "none", color: "var(--ink)", letterSpacing: "-0.01em" }}
+        >
+          Pulse
+        </a>
+
+        <nav className="lp-navlinks">
+          {sections.map((s) => (
+            <a key={s.id} href={`#${s.id}`} className="lp-navlink">{s.label}</a>
+          ))}
+        </nav>
+
+        <div className="lp-navcta">
+          {signedIn ? (
+            <>
+              <button
+                onClick={() => router.push("/profile")}
+                title="Profile & settings"
+                className="lp-hide-sm"
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 8,
+                  background: "var(--surface)", border: "1px solid var(--line-strong)",
+                  borderRadius: "var(--r-full)", padding: "4px 13px 4px 4px",
+                  cursor: "pointer", transition: "border-color var(--t-fast) linear",
+                }}
+              >
+                <span
+                  style={{
+                    width: 26, height: 26, borderRadius: "50%", display: "grid", placeItems: "center",
+                    background: "var(--accent-gradient)", color: "#fff", fontSize: 10.5, fontWeight: 700,
+                  }}
+                >
+                  {initials}
+                </span>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{username ?? "Account"}</span>
+              </button>
+              <button className="btn btn-accent" onClick={() => router.push("/projects")}>
+                Dashboard
+              </button>
+            </>
+          ) : (
+            <>
+              <button className="btn btn-ghost lp-hide-sm" onClick={onStart}>
+                Log in
+              </button>
+              <button className="btn btn-accent" onClick={onStart}>
+                Get started
+              </button>
+            </>
+          )}
+
+          <button
+            className="btn-icon lp-burger"
+            onClick={() => setMenuOpen(!menuOpen)}
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={menuOpen}
+          >
+            {menuOpen ? <X size={19} /> : <Menu size={19} />}
+          </button>
+        </div>
+      </div>
+
+      {menuOpen && (
+        <div
+          style={{
+            background: "var(--surface)",
+            borderTop: "1px solid var(--line)",
+            padding: "10px 18px 20px",
+            animation: "rise var(--t-base) var(--ease-out-quart)",
+          }}
+        >
+          {sections.map((s) => (
+            <a
+              key={s.id}
+              href={`#${s.id}`}
+              onClick={() => setMenuOpen(false)}
+              style={{
+                display: "block", padding: "13px 0", fontSize: 15, fontWeight: 500,
+                color: "var(--ink)", textDecoration: "none",
+                borderBottom: "1px solid var(--line-faint)",
+              }}
+            >
+              {s.label}
+            </a>
+          ))}
+          <button
+            className="btn btn-accent btn-lg"
+            onClick={() => { setMenuOpen(false); onStart(); }}
+            style={{ width: "100%", marginTop: 16 }}
+          >
+            {signedIn ? "Open dashboard" : "Get started"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuth } from "@/store/useAuth";
-import { getSocket, joinProject } from "@/lib/socket";
+import { getSocket } from "@/lib/socket";
 import { Bell, CheckCheck } from "lucide-react";
 
 type Notification = {
@@ -64,17 +64,15 @@ export function NotificationBell() {
 
     fetchNotifications();
 
-    // Join personal room so we receive notification:new for this user
+    // Notifications are delivered to the user's PERSONAL room (`user:<id>`) via
+    // emitToUser, so joining that one room is sufficient. This used to also
+    // fetch GET /projects purely to join every project room — an entire extra
+    // HTTP round-trip of heavy data that delivered nothing the bell needed.
     const socket = getSocket();
     const joinPersonal = () => {
       if (user?.id) socket.emit("join", { userId: user.id });
     };
     if (socket.connected) joinPersonal(); else socket.on("connect", joinPersonal);
-
-    // Also join all project rooms so project-wide events still arrive
-    api.get("/projects").then(res => {
-      res.data.forEach((p: any) => joinProject(p.id, user?.id));
-    }).catch(() => {});
 
     const handleNew = (n: Notification) => {
       setNotifications(prev => [n, ...prev].slice(0, 30));
@@ -120,68 +118,93 @@ export function NotificationBell() {
       <button
         className="btn-icon"
         onClick={toggleOpen}
+        aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
+        aria-expanded={open}
         style={{
-          width: "36px", height: "36px", borderRadius: "10px",
-          background: open ? "rgba(255,255,255,0.1)" : "transparent",
-          border: "none", cursor: "pointer", display: "flex",
-          alignItems: "center", justifyContent: "center",
-          color: open ? "#fff" : "rgba(255,255,255,0.6)",
-          transition: "all 0.2s", position: "relative"
+          position: "relative",
+          background: open ? "var(--surface-active)" : "transparent",
+          color: open ? "var(--ink)" : "var(--ink-tertiary)",
         }}
       >
-        <Bell size={18} />
+        <Bell size={17} />
         {unread > 0 && (
-          <span style={{
-            position: "absolute", top: 2, right: 2, minWidth: 16, height: 16, padding: "0 4px",
-            borderRadius: 8, background: "#f97316", border: "2px solid var(--bg-primary)",
-            fontSize: 9, fontWeight: 800, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center"
-          }}>
+          <span
+            className="num"
+            style={{
+              position: "absolute", top: 1, right: 1, minWidth: 16, height: 16, padding: "0 4px",
+              borderRadius: 99, background: "var(--accent)", border: "2px solid var(--canvas)",
+              fontSize: 9, fontWeight: 700, color: "#fff",
+              display: "grid", placeItems: "center", lineHeight: 1,
+            }}
+          >
             {unread > 9 ? "9+" : unread}
           </span>
         )}
       </button>
 
       {open && mounted && createPortal(
-        <div ref={dropdownRef} style={{
-          position: "fixed", top: "calc(var(--navbar-height) + 12px)", right: 16,
-          width: 340, maxWidth: "calc(100vw - 32px)",
-          background: "rgba(20,20,20,0.97)", backdropFilter: "blur(12px)",
-          border: "1px solid rgba(255,255,255,0.1)", borderRadius: 16,
-          boxShadow: "0 10px 40px rgba(0,0,0,0.5)", zIndex: 999999, overflow: "hidden"
-        }}>
-          <div style={{ padding: "14px 16px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>Notifications</span>
+        <div
+          ref={dropdownRef}
+          role="dialog"
+          aria-label="Notifications"
+          style={{
+            position: "fixed", top: "calc(var(--navbar-height) + 10px)", right: 16,
+            width: 348, maxWidth: "calc(100vw - 32px)",
+            background: "var(--surface)",
+            border: "1px solid var(--line)",
+            borderRadius: "var(--r-lg)",
+            boxShadow: "var(--shadow-xl)",
+            zIndex: 999999, overflow: "hidden",
+            animation: "scale-in var(--t-base) var(--ease-out-quart)",
+            transformOrigin: "top right",
+          }}
+        >
+          <div
+            style={{
+              padding: "13px 16px", borderBottom: "1px solid var(--line)",
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              background: "var(--surface-sunken)",
+            }}
+          >
+            <span className="eyebrow" style={{ fontSize: 10.5 }}>Notifications</span>
             {notifications.length > 0 && (
-              <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "rgba(255,255,255,0.4)" }}>
-                <CheckCheck size={13} /> All read
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--ink-tertiary)" }}>
+                <CheckCheck size={12} /> Marked read
               </span>
             )}
           </div>
 
-          <div style={{ maxHeight: 400, overflowY: "auto" }}>
+          <div style={{ maxHeight: 396, overflowY: "auto" }}>
             {notifications.length === 0 ? (
-              <div style={{ padding: "40px 20px", textAlign: "center", color: "rgba(255,255,255,0.4)", fontSize: 13 }}>
-                You&apos;re all caught up!
-              </div>
+              <p style={{ padding: "38px 22px", textAlign: "center", color: "var(--ink-tertiary)", fontSize: 13, lineHeight: 1.6, margin: 0 }}>
+                Nothing yet. Updates to your boards will appear here.
+              </p>
             ) : (
-              notifications.map(n => (
-                <div key={n.id} onClick={() => handleClick(n)} style={{
-                  padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.03)",
-                  display: "flex", gap: 12, alignItems: "flex-start", transition: "background 0.2s", cursor: "pointer",
-                  background: n.read ? "transparent" : "rgba(249,115,22,0.06)"
-                }}
-                  onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
-                  onMouseLeave={e => e.currentTarget.style.background = n.read ? "transparent" : "rgba(249,115,22,0.06)"}>
-                  <div style={{
-                    width: 8, height: 8, borderRadius: "50%", marginTop: 6, flexShrink: 0,
-                    background: n.read ? "transparent" : "#f97316"
-                  }} />
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{n.title}</div>
-                    <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.7)", lineHeight: 1.4, marginTop: 2 }}>{n.message}</div>
-                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 4 }}>{timeAgo(n.createdAt)}</div>
+              notifications.map((n, i) => (
+                <button
+                  key={n.id}
+                  onClick={() => handleClick(n)}
+                  style={{
+                    width: "100%", textAlign: "left", cursor: "pointer",
+                    padding: "12px 16px",
+                    borderBottom: i === notifications.length - 1 ? "none" : "1px solid var(--line-faint)",
+                    borderLeft: n.read ? "2px solid transparent" : "2px solid var(--accent)",
+                    borderTop: "none", borderRight: "none",
+                    display: "flex", gap: 11, alignItems: "flex-start",
+                    background: n.read ? "transparent" : "var(--accent-tint)",
+                    transition: "background var(--t-fast) linear",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "var(--surface-hover)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = n.read ? "transparent" : "var(--accent-tint)"; }}
+                >
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 620, color: "var(--ink)" }}>{n.title}</div>
+                    <div style={{ fontSize: 12.5, color: "var(--ink-secondary)", lineHeight: 1.45, marginTop: 2, wordBreak: "break-word" }}>
+                      {n.message}
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--ink-tertiary)", marginTop: 4 }}>{timeAgo(n.createdAt)}</div>
                   </div>
-                </div>
+                </button>
               ))
             )}
           </div>

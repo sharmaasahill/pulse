@@ -1,10 +1,11 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuth } from "@/store/useAuth";
 import { Navbar } from "@/app/components/Navbar";
-import { User, Mail, AtSign, Lock, Shield, Calendar, Check, AlertCircle, Save } from "lucide-react";
+import { Eye, EyeOff, Check, AlertTriangle, X } from "lucide-react";
 
 type Profile = {
   id: string;
@@ -15,284 +16,402 @@ type Profile = {
   createdAt: string;
 };
 
-type Banner = { kind: "success" | "error"; text: string } | null;
+type Note = { ok: boolean; text: string } | null;
 
-export default function ProfilePage() {
+const SECTIONS = [
+  { id: "identity", label: "Identity" },
+  { id: "security", label: "Security" },
+  { id: "account", label: "Account" },
+];
+
+export default function SettingsPage() {
   const router = useRouter();
   const { updateUser } = useAuth();
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Profile details form
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [profileBanner, setProfileBanner] = useState<Banner>(null);
+  const [savingIdentity, setSavingIdentity] = useState(false);
+  const [identityNote, setIdentityNote] = useState<Note>(null);
 
-  // Password form
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [savingPassword, setSavingPassword] = useState(false);
-  const [passwordBanner, setPasswordBanner] = useState<Banner>(null);
-  // Start the current-password field read-only so the browser's autofill skips
-  // it on load; we lift that as soon as the user actually focuses it.
-  const [currentPwReadOnly, setCurrentPwReadOnly] = useState(true);
+  const [showPw, setShowPw] = useState(false);
+  const [savingPw, setSavingPw] = useState(false);
+  const [pwNote, setPwNote] = useState<Note>(null);
+  // Read-only on load so the browser's autofill skips it; released on focus.
+  const [pwLocked, setPwLocked] = useState(true);
 
-  const initialized = useRef(false);
+  const [active, setActive] = useState("identity");
+  const booted = useRef(false);
 
   useEffect(() => {
-    if (initialized.current) return;
-    initialized.current = true;
+    if (booted.current) return;
+    booted.current = true;
 
-    // Guard: must be logged in. Mirror the token bootstrap used elsewhere.
-    const stored = typeof window !== "undefined" ? localStorage.getItem("auth-storage") : null;
-    let parsedToken: string | null = null;
-    try { if (stored) parsedToken = JSON.parse(stored)?.state?.token ?? null; } catch { /* ignore */ }
-    const token = useAuth.getState().token ?? parsedToken;
-    if (!token) { router.push("/"); return; }
+    const raw = typeof window !== "undefined" ? localStorage.getItem("auth-storage") : null;
+    let stored: string | null = null;
+    try { if (raw) stored = JSON.parse(raw)?.state?.token ?? null; } catch { /* ignore */ }
+    if (!(useAuth.getState().token ?? stored)) { router.push("/"); return; }
 
     api.get("/users/me")
-      .then(res => {
-        const p: Profile = res.data;
+      .then((r) => {
+        const p: Profile = r.data;
         setProfile(p);
-        setName(p.name ?? "");
-        setUsername(p.username ?? "");
-        setEmail(p.email ?? "");
+        setName(p.name ?? ""); setUsername(p.username); setEmail(p.email);
       })
-      .catch((err: any) => {
-        if (err?.response?.status === 401) router.push("/");
-      })
+      .catch((e: any) => { if (e?.response?.status === 401) router.push("/"); })
       .finally(() => setLoading(false));
   }, [router]);
 
-  async function saveProfile() {
-    setProfileBanner(null);
+  // Highlight the section currently in view.
+  useEffect(() => {
+    if (loading) return;
+    const els = SECTIONS.map((s) => document.getElementById(s.id)).filter(Boolean) as HTMLElement[];
+    if (!els.length) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible[0]) setActive(visible[0].target.id);
+      },
+      { rootMargin: "-96px 0px -62% 0px", threshold: 0 }
+    );
+    els.forEach((el) => obs.observe(el));
+    return () => obs.disconnect();
+  }, [loading]);
+
+  const identityDirty = useMemo(() => {
+    if (!profile) return false;
+    return name.trim() !== (profile.name ?? "") ||
+      username.trim() !== profile.username ||
+      email.trim() !== profile.email;
+  }, [profile, name, username, email]);
+
+  function resetIdentity() {
+    if (!profile) return;
+    setName(profile.name ?? ""); setUsername(profile.username); setEmail(profile.email);
+    setIdentityNote(null);
+  }
+
+  async function saveIdentity() {
     if (!name.trim() || !username.trim() || !email.trim()) {
-      setProfileBanner({ kind: "error", text: "Name, username and email are all required." });
+      setIdentityNote({ ok: false, text: "Name, username and email are all required." });
       return;
     }
-    setSavingProfile(true);
+    setSavingIdentity(true); setIdentityNote(null);
     try {
-      const res = await api.patch("/users/me", {
-        name: name.trim(),
-        username: username.trim(),
-        email: email.trim(),
+      const { data } = await api.patch("/users/me", {
+        name: name.trim(), username: username.trim(), email: email.trim(),
       });
-      const updated: Profile = res.data;
-      setProfile(updated);
-      // Keep the Navbar / rest of the app in sync immediately.
-      updateUser({ name: updated.name ?? "", username: updated.username, email: updated.email });
-      setProfileBanner({ kind: "success", text: "Profile updated." });
-    } catch (err: any) {
-      setProfileBanner({ kind: "error", text: err?.response?.data?.message || "Could not update profile." });
-    } finally {
-      setSavingProfile(false);
-    }
+      setProfile(data);
+      updateUser({ name: data.name ?? "", username: data.username, email: data.email });
+      setIdentityNote({ ok: true, text: "Saved." });
+    } catch (e: any) {
+      setIdentityNote({ ok: false, text: e?.response?.data?.message ?? "Could not save changes." });
+    } finally { setSavingIdentity(false); }
   }
 
   async function savePassword() {
-    setPasswordBanner(null);
     if (!currentPassword || !newPassword) {
-      setPasswordBanner({ kind: "error", text: "Please fill in both password fields." });
+      setPwNote({ ok: false, text: "Fill in both password fields." });
       return;
     }
     if (newPassword.length < 6) {
-      setPasswordBanner({ kind: "error", text: "New password must be at least 6 characters." });
+      setPwNote({ ok: false, text: "New password must be at least 6 characters." });
       return;
     }
     if (newPassword !== confirmPassword) {
-      setPasswordBanner({ kind: "error", text: "New password and confirmation do not match." });
+      setPwNote({ ok: false, text: "New password and confirmation don't match." });
       return;
     }
-    setSavingPassword(true);
+    setSavingPw(true); setPwNote(null);
     try {
       await api.patch("/users/me/password", { currentPassword, newPassword });
       setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
-      setPasswordBanner({ kind: "success", text: "Password changed successfully." });
-    } catch (err: any) {
-      setPasswordBanner({ kind: "error", text: err?.response?.data?.message || "Could not change password." });
-    } finally {
-      setSavingPassword(false);
-    }
+      setPwNote({ ok: true, text: "Password changed." });
+    } catch (e: any) {
+      setPwNote({ ok: false, text: e?.response?.data?.message ?? "Could not change password." });
+    } finally { setSavingPw(false); }
   }
 
-  const dirtyProfile = !!profile && (
-    name.trim() !== (profile.name ?? "") ||
-    username.trim() !== profile.username ||
-    email.trim() !== profile.email
-  );
-
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg-primary)", color: "var(--text-primary)" }}>
+    <div style={{ minHeight: "100vh" }}>
       <Navbar />
+
       <style>{`
-        .settings-input {
-          width: 100%; background: var(--bg-primary); border: 1px solid var(--border-primary);
-          border-radius: 10px; padding: 11px 12px 11px 38px; color: var(--text-primary);
-          font-size: 14px; outline: none; transition: border-color 0.15s; font-family: inherit;
+        .st { max-width: 1000px; margin: 0 auto; padding: calc(var(--navbar-height) + 46px) 32px 140px; }
+
+        .st-head { margin-bottom: 44px; }
+        .st-title { font-size: clamp(2.1rem, 4.2vw, 2.9rem); line-height: 1.03; margin: 12px 0 0; }
+
+        .st-grid { display: grid; grid-template-columns: 172px minmax(0, 1fr); gap: 56px; align-items: start; }
+
+        /* Section nav — a quiet ruled list, no pills or boxes. */
+        .st-nav { position: sticky; top: calc(var(--navbar-height) + 34px); display: grid; gap: 1px; }
+        .st-nav a {
+          display: block; padding: 7px 0 7px 13px; font-size: 13.5px;
+          color: var(--ink-tertiary); text-decoration: none;
+          border-left: 1px solid var(--line);
+          transition: color 110ms linear, border-color 110ms linear;
         }
-        .settings-input:focus { border-color: var(--accent-primary); }
-        .settings-card {
-          background: var(--bg-hover); border: 1px solid var(--border-primary);
-          border-radius: 16px; padding: 24px; margin-bottom: 20px;
+        .st-nav a:hover { color: var(--ink-secondary); }
+        .st-nav a[data-on="true"] { color: var(--ink); border-left-color: var(--ink); }
+
+        /* Sections are separated by rules, not wrapped in cards. */
+        .st-sec { padding-bottom: 42px; margin-bottom: 42px; border-bottom: 1px solid var(--line); scroll-margin-top: calc(var(--navbar-height) + 28px); }
+        .st-sec:last-of-type { border-bottom: none; margin-bottom: 0; }
+        .st-sec-h { font-size: 17px; font-weight: 550; letter-spacing: -0.01em; }
+        .st-sec-d { font-size: 13.5px; color: var(--ink-tertiary); margin-top: 5px; line-height: 1.6; max-width: 52ch; }
+
+        /* The ledger: label left, control right, hairline between rows. */
+        .st-row {
+          display: grid; grid-template-columns: 148px minmax(0, 1fr);
+          gap: 20px; align-items: center;
+          padding: 15px 0; border-bottom: 1px solid var(--line-faint);
         }
-        .settings-field { position: relative; margin-bottom: 16px; }
-        .settings-field > svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-tertiary); pointer-events: none; }
-        .settings-label { display: block; font-size: 11px; font-weight: 700; color: var(--text-tertiary); margin-bottom: 7px; text-transform: uppercase; letter-spacing: 0.06em; }
-        .settings-save {
-          background: var(--accent-gradient); border: none; color: #fff; font-size: 13px; font-weight: 700;
-          padding: 10px 18px; border-radius: 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px;
-          font-family: inherit; transition: opacity 0.15s;
+        .st-row:first-of-type { border-top: 1px solid var(--line-faint); }
+        .st-label { font-size: 13.5px; color: var(--ink-secondary); }
+        .st-hint { font-size: 12px; color: var(--ink-faint); margin-top: 3px; }
+        .st-static { font-size: 13.5px; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+        .st-actions { display: flex; align-items: center; gap: 12px; margin-top: 20px; }
+
+        /* A save bar only appears when there is something to save. */
+        .st-bar {
+          position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+          background: rgba(251,250,248,0.92);
+          -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+          border-top: 1px solid var(--line);
+          animation: rise 200ms var(--ease-out-quart);
         }
-        .settings-save:disabled { opacity: 0.5; cursor: not-allowed; }
+        .st-bar-in {
+          max-width: 1000px; margin: 0 auto; padding: 13px 32px;
+          display: flex; align-items: center; justify-content: space-between; gap: 16px;
+        }
+
+        .pw-wrap { position: relative; }
+        .pw-eye {
+          position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+          display: grid; place-items: center; width: 26px; height: 26px;
+          background: none; border: none; border-radius: 5px; cursor: pointer;
+          color: var(--ink-faint); transition: color 110ms linear;
+        }
+        .pw-eye:hover { color: var(--ink); }
+
+        @media (max-width: 860px) {
+          .st { padding: calc(var(--navbar-height) + 28px) 18px 130px; }
+          .st-grid { grid-template-columns: 1fr; gap: 28px; }
+          .st-nav { position: static; display: flex; gap: 0; overflow-x: auto; border-bottom: 1px solid var(--line); }
+          .st-nav a { border-left: none; border-bottom: 2px solid transparent; padding: 8px 14px 10px; white-space: nowrap; }
+          .st-nav a[data-on="true"] { border-left-color: transparent; border-bottom-color: var(--ink); }
+          .st-row { grid-template-columns: 1fr; gap: 7px; }
+          .st-bar-in { padding: 12px 18px; }
+        }
       `}</style>
 
-      <div style={{ maxWidth: 640, margin: "0 auto", padding: "calc(var(--navbar-height) + 32px) 20px 60px" }}>
-        <h1 style={{ fontSize: 26, fontWeight: 900, margin: "0 0 4px", letterSpacing: "-0.02em" }}>Account Settings</h1>
-        <p style={{ color: "var(--text-tertiary)", fontSize: 14, margin: "0 0 28px" }}>
-          Manage your profile information and password.
-        </p>
+      <div className="st">
+        <header className="st-head">
+          <span className="eyebrow">Account</span>
+          <h1 className="display st-title">Settings</h1>
+        </header>
 
         {loading ? (
-          <div style={{ display: "flex", justifyContent: "center", padding: 60 }}>
-            <div style={{ width: 36, height: 36, border: "3px solid var(--border-primary)", borderTopColor: "var(--accent-primary)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          <div style={{ display: "grid", gap: 14, maxWidth: 520 }}>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} style={{ display: "flex", gap: 20, padding: "15px 0", borderBottom: "1px solid var(--line-faint)" }}>
+                <span className="skeleton skeleton-text" style={{ width: 108 }} />
+                <span className="skeleton skeleton-text" style={{ flex: 1, maxWidth: 260 }} />
+              </div>
+            ))}
           </div>
         ) : (
-          <>
-            {/* ── Profile details ── */}
-            <div className="settings-card">
-              <h2 style={{ fontSize: 16, fontWeight: 800, margin: "0 0 4px", display: "flex", alignItems: "center", gap: 8 }}>
-                <User size={17} color="var(--accent-primary)" /> Profile
-              </h2>
-              <p style={{ color: "var(--text-tertiary)", fontSize: 13, margin: "0 0 20px" }}>
-                Your display name and how teammates find you.
-              </p>
+          <div className="st-grid">
+            <nav className="st-nav" aria-label="Settings sections">
+              {SECTIONS.map((s) => (
+                <a key={s.id} href={`#${s.id}`} data-on={active === s.id}>{s.label}</a>
+              ))}
+            </nav>
 
-              <div>
-                <label className="settings-label">Full name</label>
-                <div className="settings-field">
-                  <User size={15} />
-                  <input className="settings-input" value={name} onChange={e => setName(e.target.value)} placeholder="Your name" />
+            <div>
+              {/* ── Identity ── */}
+              <section id="identity" className="st-sec">
+                <h2 className="st-sec-h">Identity</h2>
+                <p className="st-sec-d">
+                  How you appear to teammates on shared boards.
+                </p>
+
+                <div style={{ marginTop: 22 }}>
+                  <div className="st-row">
+                    <div>
+                      <div className="st-label">Full name</div>
+                    </div>
+                    <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
+                  </div>
+
+                  <div className="st-row">
+                    <div>
+                      <div className="st-label">Username</div>
+                      <div className="st-hint">Must be unique</div>
+                    </div>
+                    <input className="input" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" minLength={3} />
+                  </div>
+
+                  <div className="st-row">
+                    <div>
+                      <div className="st-label">Email</div>
+                      <div className="st-hint">Used to sign in</div>
+                    </div>
+                    <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+                  </div>
                 </div>
-              </div>
 
-              <div>
-                <label className="settings-label">Username</label>
-                <div className="settings-field">
-                  <AtSign size={15} />
-                  <input className="settings-input" value={username} onChange={e => setUsername(e.target.value)} placeholder="username" />
+                {identityNote && !identityDirty && (
+                  <div style={{ marginTop: 16 }}><Feedback note={identityNote} /></div>
+                )}
+              </section>
+
+              {/* ── Security ── */}
+              <section id="security" className="st-sec">
+                <h2 className="st-sec-h">Security</h2>
+                <p className="st-sec-d">
+                  Changing your password requires the current one. You&apos;ll get a
+                  notification when it changes.
+                </p>
+
+                <div style={{ marginTop: 22 }}>
+                  <div className="st-row">
+                    <div className="st-label">Current password</div>
+                    <div className="pw-wrap">
+                      <input
+                        className="input"
+                        type={showPw ? "text" : "password"}
+                        name="pulse-current-pw"
+                        value={currentPassword}
+                        placeholder="••••••••"
+                        autoComplete="off"
+                        readOnly={pwLocked}
+                        onFocus={() => setPwLocked(false)}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        style={{ paddingRight: 40 }}
+                      />
+                      <button
+                        type="button" className="pw-eye"
+                        onClick={() => setShowPw((v) => !v)}
+                        aria-label={showPw ? "Hide passwords" : "Show passwords"}
+                      >
+                        {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="st-row">
+                    <div>
+                      <div className="st-label">New password</div>
+                      <div className="st-hint">At least 6 characters</div>
+                    </div>
+                    <input
+                      className="input" type={showPw ? "text" : "password"}
+                      value={newPassword} placeholder="••••••••" autoComplete="new-password"
+                      onChange={(e) => setNewPassword(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="st-row">
+                    <div className="st-label">Confirm</div>
+                    <input
+                      className="input" type={showPw ? "text" : "password"}
+                      value={confirmPassword} placeholder="••••••••" autoComplete="new-password"
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && savePassword()}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div>
-                <label className="settings-label">Email</label>
-                <div className="settings-field">
-                  <Mail size={15} />
-                  <input className="settings-input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" />
+                <div className="st-actions">
+                  <button
+                    className="btn btn-secondary"
+                    onClick={savePassword}
+                    disabled={savingPw || !currentPassword || !newPassword}
+                  >
+                    {savingPw ? "Updating…" : "Change password"}
+                  </button>
+                  {pwNote && <Feedback note={pwNote} />}
                 </div>
-              </div>
+              </section>
 
-              {profileBanner && <Banner banner={profileBanner} />}
+              {/* ── Account ── */}
+              {profile && (
+                <section id="account" className="st-sec">
+                  <h2 className="st-sec-h">Account</h2>
+                  <p className="st-sec-d">Read-only details about this account.</p>
 
-              <button className="settings-save" onClick={saveProfile} disabled={savingProfile || !dirtyProfile}>
-                <Save size={15} /> {savingProfile ? "Saving…" : "Save changes"}
-              </button>
+                  <div style={{ marginTop: 22 }}>
+                    <div className="st-row">
+                      <div className="st-label">Member since</div>
+                      <div className="st-static">
+                        {new Date(profile.createdAt).toLocaleDateString(undefined, {
+                          year: "numeric", month: "long", day: "numeric",
+                        })}
+                      </div>
+                    </div>
+                    <div className="st-row">
+                      <div className="st-label">Access level</div>
+                      <div className="st-static">{profile.isSuperUser ? "Super user" : "Standard"}</div>
+                    </div>
+                    <div className="st-row">
+                      <div className="st-label">User ID</div>
+                      <div className="st-static mono" style={{ fontSize: 12.5, color: "var(--ink-tertiary)", wordBreak: "break-all" }}>
+                        {profile.id}
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              )}
             </div>
-
-            {/* ── Change password ── */}
-            <div className="settings-card">
-              <h2 style={{ fontSize: 16, fontWeight: 800, margin: "0 0 4px", display: "flex", alignItems: "center", gap: 8 }}>
-                <Lock size={17} color="var(--accent-primary)" /> Password
-              </h2>
-              <p style={{ color: "var(--text-tertiary)", fontSize: 13, margin: "0 0 20px" }}>
-                Use at least 6 characters. You&apos;ll need your current password.
-              </p>
-
-              <div>
-                <label className="settings-label">Current password</label>
-                <div className="settings-field">
-                  <Lock size={15} />
-                  <input
-                    className="settings-input"
-                    type="password"
-                    name="pulse-current-password"
-                    value={currentPassword}
-                    onChange={e => setCurrentPassword(e.target.value)}
-                    placeholder="••••••••"
-                    autoComplete="off"
-                    readOnly={currentPwReadOnly}
-                    onFocus={() => setCurrentPwReadOnly(false)}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="settings-label">New password</label>
-                <div className="settings-field">
-                  <Lock size={15} />
-                  <input className="settings-input" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="••••••••" autoComplete="new-password" />
-                </div>
-              </div>
-
-              <div>
-                <label className="settings-label">Confirm new password</label>
-                <div className="settings-field">
-                  <Lock size={15} />
-                  <input className="settings-input" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="••••••••" autoComplete="new-password" />
-                </div>
-              </div>
-
-              {passwordBanner && <Banner banner={passwordBanner} />}
-
-              <button className="settings-save" onClick={savePassword} disabled={savingPassword}>
-                <Lock size={15} /> {savingPassword ? "Updating…" : "Update password"}
-              </button>
-            </div>
-
-            {/* ── Account info (read-only) ── */}
-            {profile && (
-              <div className="settings-card" style={{ marginBottom: 0 }}>
-                <h2 style={{ fontSize: 16, fontWeight: 800, margin: "0 0 20px", display: "flex", alignItems: "center", gap: 8 }}>
-                  <Shield size={17} color="var(--accent-primary)" /> Account
-                </h2>
-                <InfoRow icon={<Calendar size={15} />} label="Member since"
-                  value={new Date(profile.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })} />
-                <InfoRow icon={<Shield size={15} />} label="Role"
-                  value={profile.isSuperUser ? "Super user" : "Standard user"} />
-              </div>
-            )}
-          </>
+          </div>
         )}
       </div>
+
+      {/* Save bar — only present when identity fields differ from what's stored. */}
+      {identityDirty && (
+        <div className="st-bar">
+          <div className="st-bar-in">
+            <span style={{ fontSize: 13.5, color: "var(--ink-secondary)" }}>
+              {identityNote && !identityNote.ok ? (
+                <span style={{ color: "var(--danger)" }}>{identityNote.text}</span>
+              ) : (
+                "You have unsaved changes."
+              )}
+            </span>
+            <span style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn-ghost" onClick={resetIdentity}>Discard</button>
+              <button className="btn btn-accent" onClick={saveIdentity} disabled={savingIdentity}>
+                {savingIdentity ? "Saving…" : "Save changes"}
+              </button>
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function Banner({ banner }: { banner: NonNullable<Banner> }) {
-  const isOk = banner.kind === "success";
+function Feedback({ note }: { note: NonNullable<Note> }) {
   return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 8, marginBottom: 16, padding: "10px 12px",
-      borderRadius: 10, fontSize: 13, fontWeight: 600,
-      background: isOk ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)",
-      color: isOk ? "#10b981" : "#ef4444",
-      border: `1px solid ${isOk ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`,
-    }}>
-      {isOk ? <Check size={15} /> : <AlertCircle size={15} />} {banner.text}
-    </div>
-  );
-}
-
-function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border-primary)" }}>
-      <span style={{ color: "var(--text-tertiary)", display: "flex" }}>{icon}</span>
-      <span style={{ fontSize: 13, color: "var(--text-tertiary)", width: 120 }}>{label}</span>
-      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>{value}</span>
-    </div>
+    <span
+      role="status"
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 6,
+        fontSize: 13, fontWeight: 500,
+        color: note.ok ? "var(--success)" : "var(--danger)",
+      }}
+    >
+      {note.ok ? <Check size={14} /> : <AlertTriangle size={14} />}
+      {note.text}
+    </span>
   );
 }

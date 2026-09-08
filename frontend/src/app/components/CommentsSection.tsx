@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/store/useAuth";
 import { getSocket } from "@/lib/socket";
-import { Send, Trash2/*, MessageCircle*/ } from "lucide-react";
+import { Send, Trash2, MessageSquare } from "lucide-react";
 
 type Comment = {
   id: string;
@@ -83,11 +83,12 @@ export function CommentsSection({ ticketId, projectId }: { ticketId: string; pro
       borderTop: "1px solid var(--border-primary)", marginTop: 16,
       display: "flex", flexDirection: "column",
     }}>
-      <div style={{
-        padding: "12px 0 8px", fontSize: 13, fontWeight: 700,
-        color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 6,
-      }}>
-        💬 Comments ({comments.length})
+      <div style={{ padding: "2px 0 12px", display: "flex", alignItems: "center", gap: 8 }}>
+        <MessageSquare size={14} style={{ color: "var(--accent-strong)" }} />
+        <span className="eyebrow" style={{ fontSize: 10.5 }}>Comments</span>
+        {comments.length > 0 && (
+          <span className="badge badge-muted num" style={{ fontSize: 10.5 }}>{comments.length}</span>
+        )}
       </div>
 
       {/* Comment list */}
@@ -146,24 +147,21 @@ export function CommentsSection({ ticketId, projectId }: { ticketId: string; pro
         borderTop: "1px solid var(--border-secondary)",
       }}>
         <input
+          className="input"
           value={text}
           onChange={e => setText(e.target.value)}
           onKeyDown={e => e.key === "Enter" && !e.shiftKey && send()}
-          placeholder="Write a comment..."
-          style={{
-            flex: 1, padding: "8px 12px", borderRadius: "var(--radius-md)",
-            border: "1px solid var(--border-primary)",
-            background: "var(--bg-secondary)", color: "var(--text-primary)",
-            fontSize: 13, outline: "none",
-          }}
+          placeholder="Write a comment…"
+          aria-label="Write a comment"
+          style={{ flex: 1, fontSize: 13.5, padding: "9px 12px" }}
         />
-        <button onClick={send} disabled={sending || !text.trim()} style={{
-          width: 36, height: 36, borderRadius: "var(--radius-md)",
-          border: "none", background: "var(--accent-gradient)", color: "#fff",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          cursor: "pointer", opacity: sending || !text.trim() ? 0.4 : 1,
-          transition: "opacity 0.15s ease",
-        }}>
+        <button
+          onClick={send}
+          disabled={sending || !text.trim()}
+          className="btn btn-accent"
+          aria-label="Send comment"
+          style={{ width: 38, height: 38, padding: 0, flexShrink: 0 }}
+        >
           <Send size={14} />
         </button>
       </div>

@@ -1,729 +1,1026 @@
 "use client";
-import { useEffect, useState, useMemo, useRef } from "react";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { api, setAuthToken } from "@/lib/api";
 import { getSocket, joinProject } from "@/lib/socket";
-import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/store/useAuth";
 import { Notifications } from "./notifications";
 import { ShareModal } from "@/app/components/ShareModal";
 import { MembersPanel } from "@/app/components/MembersPanel";
 import { CommentsSection } from "@/app/components/CommentsSection";
-import { 
-  DndContext, DragOverlay, closestCorners, MouseSensor, 
-  useSensor, useSensors, DragStartEvent, DragEndEvent, useDroppable
+import {
+  DndContext, DragOverlay, MouseSensor, TouchSensor, useSensor, useSensors,
+  useDroppable, type DragEndEvent, type DragStartEvent,
 } from "@dnd-kit/core";
-import { 
-  SortableContext, arrayMove, sortableKeyboardCoordinates, 
-  verticalListSortingStrategy, useSortable 
-} from "@dnd-kit/sortable";
+import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  Search, Plus, Edit2, Trash2, ArrowLeft, ArrowRight, AlertCircle, X, CheckCircle2,
-  Clock, Zap, Circle, GripVertical, Flag, ChevronRight, Activity
+  ArrowLeft, ArrowRight, Plus, Search, Edit2, Trash2, X, AlertTriangle,
+  Share2, Activity, Circle, CircleDot, CheckCircle2,
 } from "lucide-react";
 
+/* ── Types ────────────────────────────────────────────────────── */
+
+type Priority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+type Status = "TODO" | "IN_PROGRESS" | "DONE";
+type Person = { id: string; email: string; name?: string; username?: string };
+
 interface Ticket {
-  id: string; title: string; authorId?: string;
-  author?: { id: string; email: string; name?: string; username?: string };
-  assigneeId?: string | null;
-  assignee?: { id: string; email: string; name?: string; username?: string } | null;
-  status: "TODO" | "IN_PROGRESS" | "DONE";
+  id: string;
+  title: string;
   description?: string;
-  priority?: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+  status: Status;
+  priority?: Priority;
+  authorId?: string;
+  author?: Person;
+  assigneeId?: string | null;
+  assignee?: Person | null;
 }
-interface Member {
-  userId: string;
-  role: "OWNER" | "EDITOR" | "VIEWER";
-}
+
 interface Project {
   id: string;
   name: string;
+  description?: string;
   updatedAt?: string;
   tickets?: Ticket[];
-  members?: Array<{ userId: string; role: string; user?: any }>;
-  owner?: { id: string; name?: string; email?: string; username?: string };
+  members?: Array<{ userId: string; role: string; user?: Person }>;
+  owner?: Person;
 }
 
-type Priority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+/* ── Tokens for this screen ───────────────────────────────────── */
 
-const PRIORITY_META: Record<Priority, { color: string; bg: string; label: string }> = {
-  LOW: { color: "#6b7280", bg: "rgba(107,114,128,0.1)", label: "Low" },
-  MEDIUM: { color: "#f59e0b", bg: "rgba(245,158,11,0.1)", label: "Medium" },
-  HIGH: { color: "#f97316", bg: "rgba(249,115,22,0.1)", label: "High" },
-  URGENT: { color: "#ef4444", bg: "rgba(239,68,68,0.1)", label: "Urgent" },
+const PRIORITY: Record<Priority, { label: string; fg: string; bg: string }> = {
+  LOW:    { label: "Low",    fg: "var(--ink-tertiary)", bg: "var(--surface-sunken)" },
+  MEDIUM: { label: "Medium", fg: "var(--warning)",      bg: "var(--warning-tint)" },
+  HIGH:   { label: "High",   fg: "var(--accent-strong)", bg: "var(--accent-tint)" },
+  URGENT: { label: "Urgent", fg: "var(--danger)",       bg: "var(--danger-tint)" },
 };
 
-const COL_META = {
-  TODO: {
-    color: "#94a3b8", glow: "rgba(148,163,184,0.15)", bg: "rgba(148,163,184,0.1)",
-    borderColor: "rgba(148,163,184,0.3)", label: "To Do", icon: <Circle size={14} />,
-  },
-  IN_PROGRESS: {
-    color: "#f97316", glow: "rgba(249,115,22,0.15)", bg: "rgba(249,115,22,0.1)",
-    borderColor: "rgba(249,115,22,0.35)", label: "In Progress", icon: <Zap size={14} />,
-  },
-  DONE: {
-    color: "#10b981", glow: "rgba(16,185,129,0.15)", bg: "rgba(16,185,129,0.1)",
-    borderColor: "rgba(16,185,129,0.35)", label: "Done", icon: <CheckCircle2 size={14} />,
-  },
+const COLUMN: Record<Status, { label: string; rule: string; icon: React.ReactNode }> = {
+  TODO:        { label: "To Do",       rule: "var(--ink-faint)", icon: <Circle size={13} /> },
+  IN_PROGRESS: { label: "In Progress", rule: "var(--accent)",    icon: <CircleDot size={13} /> },
+  DONE:        { label: "Done",        rule: "var(--success)",   icon: <CheckCircle2 size={13} /> },
 };
 
-/* ─── Draggable Ticket Card ─── */
-function DraggableTicket({ ticket, onEdit, onDelete, onMove }: {
-  ticket: Ticket; onEdit: (t: Ticket) => void; onDelete: (t: Ticket) => void;
-  onMove: (id: string, st: "TODO" | "IN_PROGRESS" | "DONE") => void;
+const STATUSES: Status[] = ["TODO", "IN_PROGRESS", "DONE"];
+
+function label(p?: Person | null) {
+  if (!p) return "";
+  return p.name || p.username || p.email.split("@")[0];
+}
+function initialsOf(p?: Person | null) {
+  const n = label(p);
+  return n ? n.slice(0, 2).toUpperCase() : "?";
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CARD
+   ═══════════════════════════════════════════════════════════════ */
+
+function TicketCard({
+  ticket, canEdit, onEdit, onDelete, onMove,
+}: {
+  ticket: Ticket; canEdit: boolean;
+  onEdit: (t: Ticket) => void;
+  onDelete: (t: Ticket) => void;
+  onMove: (id: string, s: Status) => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: ticket.id });
-  const [hovered, setHovered] = useState(false);
-  const pri = PRIORITY_META[ticket.priority || "MEDIUM"];
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: ticket.id, disabled: !canEdit });
+  const p = PRIORITY[ticket.priority ?? "MEDIUM"];
+
+  // Stop pointer events on interactive children from starting a drag or
+  // bubbling up into the card's open-for-edit click.
+  const swallow = (e: React.SyntheticEvent) => e.stopPropagation();
+
+  // A click still fires on mouse-up at the end of a drag. Without this the
+  // edit sheet would open every time you dropped a card, so we record where the
+  // press started and treat anything that travelled as a drag, not a click.
+  const pressAt = useRef<{ x: number; y: number } | null>(null);
+
+  const handleClick = (e: React.MouseEvent) => {
+    if (!canEdit) return;
+    const start = pressAt.current;
+    pressAt.current = null;
+    if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 5) return;
+    onEdit(ticket);
+  };
 
   return (
-    <div
+    <article
       ref={setNodeRef}
+      className="tk"
+      data-dragging={isDragging}
+      data-draggable={canEdit}
+      // The WHOLE card is the drag target. MouseSensor has a 6px activation
+      // distance, so a stationary press is still a click, not a drag.
+      // `listeners` uses onMouseDown / onTouchStart, so our onPointerDown below
+      // does not collide with it.
+      {...(canEdit ? attributes : {})}
+      {...(canEdit ? listeners : {})}
+      onPointerDown={(e) => { pressAt.current = { x: e.clientX, y: e.clientY }; }}
+      onClick={handleClick}
       style={{
         transform: CSS.Transform.toString(transform),
-        transition: transition ?? "border 0.2s, box-shadow 0.2s",
-        opacity: isDragging ? 0 : 1,
-        background: "rgba(255,255,255,0.04)",
-        border: `1px solid ${hovered ? "rgba(249,115,22,0.25)" : "rgba(255,255,255,0.07)"}`,
-        borderRadius: 14, padding: "14px 14px 12px", marginBottom: 8, position: "relative",
-        boxShadow: hovered ? "0 8px 24px rgba(0,0,0,0.4)" : "0 2px 8px rgba(0,0,0,0.2)",
-        cursor: isDragging ? "grabbing" : "grab",
+        transition,
+        opacity: isDragging ? 0.4 : 1,
       }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      {...attributes} {...listeners}
     >
-      {/* Drag handle + actions */}
-      <div style={{ position: "absolute", top: 8, right: 8, display: "flex", gap: 4, opacity: hovered ? 1 : 0, transition: "opacity 0.15s", zIndex: 10 }}>
-        <button
-          onClick={e => { e.stopPropagation(); onEdit(ticket); }}
-          style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: 7, padding: "4px 5px", color: "rgba(255,255,255,0.7)", cursor: "pointer", display: "flex", alignItems: "center" }}
-        ><Edit2 size={12} /></button>
-        <button
-          onClick={e => { e.stopPropagation(); onDelete(ticket); }}
-          style={{ background: "rgba(239,68,68,0.12)", border: "none", borderRadius: 7, padding: "4px 5px", color: "#ef4444", cursor: "pointer", display: "flex", alignItems: "center" }}
-        ><Trash2 size={12} /></button>
-      </div>
-
-      {/* Priority pill */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-        <span style={{
-          fontSize: 10, fontWeight: 800, color: pri.color, background: pri.bg,
-          padding: "2px 7px", borderRadius: 5, textTransform: "uppercase", letterSpacing: "0.06em",
-          display: "flex", alignItems: "center", gap: 4,
-        }}>
-          <Flag size={9} />{pri.label}
-        </span>
-      </div>
-
-      {/* Title */}
-      <h4 style={{ fontSize: 13, fontWeight: 700, margin: "0 0 5px", color: "#fff", lineHeight: 1.4, paddingRight: hovered ? 44 : 0, transition: "padding 0.2s" }}>
-        {ticket.title}
-      </h4>
-
-      {/* Description */}
-      {ticket.description && (
-        <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", margin: "0 0 10px", lineHeight: 1.5, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
-          {ticket.description}
-        </p>
+      {canEdit && (
+        <div className="tk-act" onPointerDown={swallow} onClick={swallow}>
+          <button className="tk-btn" onClick={() => onEdit(ticket)} aria-label="Edit task"><Edit2 size={11} /></button>
+          <button className="tk-btn" data-danger onClick={() => onDelete(ticket)} aria-label="Delete task"><Trash2 size={11} /></button>
+        </div>
       )}
 
-      {/* Author + Assignee */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, marginTop: 8 }}>
-        {ticket.author?.email ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-            <div style={{ width: 20, height: 20, borderRadius: "50%", background: "linear-gradient(135deg,#f97316,#ea580c)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 800, color: "#fff", flexShrink: 0 }}>
-              {(ticket.author.name || ticket.author.username || ticket.author.email).charAt(0).toUpperCase()}
-            </div>
-            <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 110 }}>
-              {ticket.author.name || ticket.author.username || ticket.author.email.split("@")[0]}
-            </span>
-          </div>
-        ) : <span />}
+      <div className="tk-body">
+        <span className="badge" style={{ color: p.fg, background: p.bg, fontSize: 10.5, marginBottom: 8 }}>
+          {p.label}
+        </span>
 
-        {ticket.assignee && (
-          <div
-            title={`Assigned to ${ticket.assignee.name || ticket.assignee.username || ticket.assignee.email}`}
-            style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0, background: "rgba(16,185,129,0.1)", padding: "2px 7px 2px 3px", borderRadius: 20 }}
+        <h4 style={{ fontSize: 13.5, fontWeight: 580, lineHeight: 1.45, color: "var(--ink)", margin: "0 0 6px" }}>
+          {ticket.title}
+        </h4>
+
+        {ticket.description && (
+          <p
+            style={{
+              fontSize: 12.5, color: "var(--ink-tertiary)", lineHeight: 1.5, margin: "0 0 10px",
+              display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+            }}
           >
-            <div style={{ width: 18, height: 18, borderRadius: "50%", background: "linear-gradient(135deg,#10b981,#059669)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 800, color: "#fff" }}>
-              {(ticket.assignee.name || ticket.assignee.username || ticket.assignee.email).charAt(0).toUpperCase()}
-            </div>
-            <span style={{ fontSize: 10, color: "#10b981", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 80 }}>
-              {ticket.assignee.name || ticket.assignee.username || ticket.assignee.email.split("@")[0]}
-            </span>
-          </div>
+            {ticket.description}
+          </p>
         )}
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+          {ticket.author && (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5, minWidth: 0 }} title={`Created by ${label(ticket.author)}`}>
+              <span className="tk-av" data-tone="author">{initialsOf(ticket.author)}</span>
+              <span style={{ fontSize: 11.5, color: "var(--ink-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 92 }}>
+                {label(ticket.author)}
+              </span>
+            </span>
+          )}
+          {ticket.assignee && (
+            <span
+              title={`Assigned to ${label(ticket.assignee)}`}
+              style={{
+                marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 5,
+                background: "var(--success-tint)", padding: "2px 8px 2px 2px", borderRadius: 99, flexShrink: 0,
+              }}
+            >
+              <span className="tk-av" data-tone="assignee">{initialsOf(ticket.assignee)}</span>
+              <span style={{ fontSize: 10.5, fontWeight: 600, color: "var(--success)", maxWidth: 76, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {label(ticket.assignee)}
+              </span>
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Mobile Move Actions */}
-      <div className="mobile-move-actions" style={{ display: "none", gap: 8, marginTop: 12, borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 12 }}>
-        {ticket.status !== "TODO" && (
-          <button onClick={e => { e.stopPropagation(); onMove(ticket.id, ticket.status === "DONE" ? "IN_PROGRESS" : "TODO"); }} 
-            style={{ flex: 1, padding: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "rgba(255,255,255,0.6)", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, cursor: "pointer" }}>
-            <ArrowLeft size={14} /> Back
-          </button>
-        )}
-        {ticket.status !== "DONE" && (
-          <button onClick={e => { e.stopPropagation(); onMove(ticket.id, ticket.status === "TODO" ? "IN_PROGRESS" : "DONE"); }}
-            style={{ flex: 1, padding: "8px", background: "rgba(249,115,22,0.1)", border: "1px solid rgba(249,115,22,0.3)", borderRadius: 8, color: "#f97316", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, cursor: "pointer", fontWeight: 700 }}>
-            Next <ArrowRight size={14} />
-          </button>
-        )}
-      </div>
-    </div>
+      {/* Touch-friendly column moves — dragging is awkward on small screens. */}
+      {canEdit && (
+        <div className="mobile-move-actions tk-move" onPointerDown={swallow} onClick={swallow}>
+          {ticket.status !== "TODO" && (
+            <button onClick={() => onMove(ticket.id, ticket.status === "DONE" ? "IN_PROGRESS" : "TODO")}>
+              <ArrowLeft size={13} /> Back
+            </button>
+          )}
+          {ticket.status !== "DONE" && (
+            <button data-next onClick={() => onMove(ticket.id, ticket.status === "TODO" ? "IN_PROGRESS" : "DONE")}>
+              Next <ArrowRight size={13} />
+            </button>
+          )}
+        </div>
+      )}
+    </article>
   );
 }
 
-/* ─── Column Quick Add ─── */
-function QuickAdd({ status, projectId, userEmail, onAdded, canEdit }: { status: string; projectId: string; userEmail: string; onAdded: () => void; canEdit: boolean }) {
-  const [open, setOpen] = useState(false);
-  const [val, setVal] = useState("");
-  const [loading, setLoading] = useState(false);
+/* ═══════════════════════════════════════════════════════════════
+   QUICK ADD
+   ═══════════════════════════════════════════════════════════════ */
 
-  if (!canEdit) return null;
+function QuickAdd({ status, projectId, onAdded }: { status: Status; projectId: string; onAdded: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
 
   async function submit() {
-    if (!val.trim()) return;
-    setLoading(true);
+    if (!value.trim()) return;
+    setBusy(true);
     try {
-      await api.post("/tickets", { projectId, title: val.trim(), status, authorEmail: userEmail });
-      setVal(""); setOpen(false); onAdded();
-    } catch { /* ignore */ }
-    finally { setLoading(false); }
+      await api.post("/tickets", { projectId, title: value.trim(), status });
+      setValue(""); setOpen(false); onAdded();
+    } catch { /* surfaced by the board reload */ }
+    finally { setBusy(false); }
   }
 
   if (!open) {
     return (
-      <button onClick={() => setOpen(true)} style={{
-        width: "100%", display: "flex", alignItems: "center", gap: 6, padding: "9px 10px",
-        background: "rgba(255,255,255,0.03)", border: "1px dashed rgba(255,255,255,0.1)", borderRadius: 10,
-        color: "rgba(255,255,255,0.35)", fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all 0.2s", marginTop: 4,
-      }}
-        onMouseEnter={e => { e.currentTarget.style.background = "rgba(249,115,22,0.08)"; e.currentTarget.style.borderColor = "rgba(249,115,22,0.3)"; e.currentTarget.style.color = "#f97316"; }}
-        onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.03)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "rgba(255,255,255,0.35)"; }}
-      >
+      <button className="qa-open" onClick={() => setOpen(true)}>
         <Plus size={14} /> Add task
       </button>
     );
   }
 
   return (
-    <div style={{ marginTop: 6 }}>
+    <div style={{ display: "grid", gap: 7 }}>
       <input
-        autoFocus value={val} onChange={e => setVal(e.target.value)}
-        onKeyDown={e => { if (e.key === "Enter") submit(); if (e.key === "Escape") setOpen(false); }}
+        className="input"
+        autoFocus
+        value={value}
         placeholder="Task title…"
-        style={{
-          width: "100%", background: "rgba(0,0,0,0.4)", border: "1px solid rgba(249,115,22,0.4)",
-          borderRadius: 10, padding: "10px 12px", color: "#fff", fontSize: 13, outline: "none",
-          fontFamily: "inherit", boxShadow: "0 0 0 3px rgba(249,115,22,0.08)",
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") submit();
+          if (e.key === "Escape") { setOpen(false); setValue(""); }
         }}
+        style={{ fontSize: 13.5, padding: "9px 11px" }}
       />
-      <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-        <button onClick={submit} disabled={loading || !val.trim()} style={{
-          flex: 1, background: "#f97316", border: "none", borderRadius: 8, padding: "8px", color: "#fff",
-          fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
-        }}>{loading ? "Adding…" : "Add"}</button>
-        <button onClick={() => { setOpen(false); setVal(""); }} style={{
-          background: "rgba(255,255,255,0.06)", border: "none", borderRadius: 8, padding: "8px 10px",
-          color: "rgba(255,255,255,0.6)", cursor: "pointer", display: "flex", alignItems: "center",
-        }}><X size={14} /></button>
+      <div style={{ display: "flex", gap: 6 }}>
+        <button className="btn btn-accent" onClick={submit} disabled={busy || !value.trim()} style={{ flex: 1 }}>
+          {busy ? "Adding…" : "Add"}
+        </button>
+        <button className="btn btn-ghost" onClick={() => { setOpen(false); setValue(""); }} style={{ paddingInline: 10 }} aria-label="Cancel">
+          <X size={14} />
+        </button>
       </div>
     </div>
   );
 }
 
-/* ─── Droppable Column ─── */
-function KanbanColumn({ id, tickets, onEdit, onDelete, projectId, userEmail, onAdded, onMove, canEdit }: {
-  id: "TODO" | "IN_PROGRESS" | "DONE"; tickets: Ticket[];
-  onEdit: (t: Ticket) => void; onDelete: (t: Ticket) => void;
-  onMove: (id: string, st: "TODO" | "IN_PROGRESS" | "DONE") => void;
-  projectId: string; userEmail: string; onAdded: () => void;
-  canEdit: boolean;
+/* ═══════════════════════════════════════════════════════════════
+   COLUMN
+   ═══════════════════════════════════════════════════════════════ */
+
+function Column({
+  status, tickets, canEdit, projectId, onAdded, onEdit, onDelete, onMove,
+}: {
+  status: Status; tickets: Ticket[]; canEdit: boolean; projectId: string;
+  onAdded: () => void;
+  onEdit: (t: Ticket) => void;
+  onDelete: (t: Ticket) => void;
+  onMove: (id: string, s: Status) => void;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id });
-  const meta = COL_META[id];
+  const { setNodeRef, isOver } = useDroppable({ id: status });
+  const meta = COLUMN[status];
 
   return (
-    <div style={{
-      background: isOver ? "rgba(249,115,22,0.05)" : "rgba(255,255,255,0.02)",
-      border: `1px solid ${isOver ? meta.borderColor : "rgba(255,255,255,0.06)"}`,
-      borderRadius: 18, padding: "16px 12px 16px 16px", display: "flex", flexDirection: "column",
-      height: "calc(100vh - 220px)", minHeight: 480,
-      transition: "all 0.2s",
-      boxShadow: isOver ? `0 0 20px ${meta.glow}` : "none",
-    }} ref={setNodeRef}>
-      {/* Column Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ color: meta.color, display: "flex" }}>{meta.icon}</div>
-          <span style={{ fontSize: 13, fontWeight: 800, color: "#fff", letterSpacing: "0.02em" }}>{meta.label}</span>
-        </div>
-        <span style={{
-          fontSize: 11, fontWeight: 800, color: meta.color, background: meta.bg || "rgba(255,255,255,0.08)",
-          padding: "3px 9px", borderRadius: 20, minWidth: 24, textAlign: "center",
-        }}>{tickets.length}</span>
-      </div>
+    <section ref={setNodeRef} className="col" data-over={isOver}>
+      <header className="col-head" style={{ borderBottomColor: meta.rule }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 7, color: "var(--ink-secondary)" }}>
+          <span style={{ color: meta.rule === "var(--ink-faint)" ? "var(--ink-tertiary)" : meta.rule, display: "flex" }}>
+            {meta.icon}
+          </span>
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+            {meta.label}
+          </span>
+        </span>
+        <span className="num" style={{ fontSize: 11.5, fontWeight: 700, color: "var(--ink-faint)" }}>
+          {tickets.length}
+        </span>
+      </header>
 
-      {/* Top accent bar */}
-      <div style={{ height: 2, background: meta.color, borderRadius: 2, marginBottom: 14, opacity: 0.4 }} />
-
-      {/* Tickets */}
-      <div style={{ flex: 1, overflowY: "auto", paddingRight: 4, display: "flex", flexDirection: "column", gap: 10 }}>
-        <SortableContext items={tickets.map(t => t.id)} strategy={verticalListSortingStrategy}>
-          {tickets.map(t => (
-            <DraggableTicket key={t.id} ticket={t} onEdit={canEdit ? onEdit : () => {}} onDelete={canEdit ? onDelete : () => {}} onMove={canEdit ? onMove : () => {}} />
+      <div className="col-body">
+        <SortableContext items={tickets.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+          {tickets.map((t) => (
+            <TicketCard
+              key={t.id} ticket={t} canEdit={canEdit}
+              onEdit={onEdit} onDelete={onDelete} onMove={onMove}
+            />
           ))}
         </SortableContext>
-        {tickets.length === 0 && !isOver && (
-          <div style={{ textAlign: "center", padding: "40px 16px", color: "rgba(255,255,255,0.15)", fontSize: 13 }}>
-            <div style={{ marginBottom: 6 }}>No tasks</div>
-            <div style={{ fontSize: 11 }}>Drop tasks here or add one below</div>
-          </div>
+
+        {tickets.length === 0 && (
+          <p style={{ padding: "26px 8px", textAlign: "center", fontSize: 12.5, color: "var(--ink-faint)", lineHeight: 1.6 }}>
+            {isOver ? "Drop here" : "Nothing here"}
+          </p>
         )}
       </div>
 
-      {/* Quick add */}
-      <div style={{ marginTop: 14, paddingRight: 4 }}>
-        <QuickAdd status={id} projectId={projectId} userEmail={userEmail} onAdded={onAdded} canEdit={canEdit} />
-      </div>
-    </div>
+      {canEdit && (
+        <footer style={{ paddingTop: 10 }}>
+          <QuickAdd status={status} projectId={projectId} onAdded={onAdded} />
+        </footer>
+      )}
+    </section>
   );
 }
 
-/* ══════════ MAIN PAGE ══════════ */
-export default function ProjectDetailPage() {
+/* ═══════════════════════════════════════════════════════════════
+   PAGE
+   ═══════════════════════════════════════════════════════════════ */
+
+export default function BoardPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const { token, logout, user } = useAuth();
+  const { user, logout } = useAuth();
   const projectId = params.id as string;
 
   const [project, setProject] = useState<Project | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+
+  const [query, setQuery] = useState("");
+  const [priorityFilter, setPriorityFilter] = useState<Priority | "ALL">("ALL");
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  // Task form
+  const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<Ticket | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("MEDIUM");
-  const [assigneeId, setAssigneeId] = useState<string>("");
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState<Ticket | null>(null);
-  const [showShareModal, setShowShareModal] = useState(false);
-  const [showMembersPanel, setShowMembersPanel] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterPriority, setFilterPriority] = useState<Priority | "ALL">("ALL");
+  const [assigneeId, setAssigneeId] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const [deleting, setDeleting] = useState<Ticket | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [membersOpen, setMembersOpen] = useState(false);
+
+  const booted = useRef(false);
 
   const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 8 } })
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 160, tolerance: 6 } })
   );
 
-  const initialized = useRef(false);
-
-  function reloadProject() {
-    const authToken = useAuth.getState().token;
-    if (!authToken) return;
-    setAuthToken(authToken);
-    api.get(`/projects/${projectId}`)
-      .then(r => setProject(r.data))
+  function reload() {
+    return api.get(`/projects/${projectId}`)
+      .then((r) => { setProject(r.data); setNotFound(false); })
       .catch((err: any) => {
-        if (err?.response?.status === 401) { logout(); router.push("/"); }
+        if (err?.response?.status === 401) { logout(); router.push("/"); return; }
+        if (err?.response?.status === 403 || err?.response?.status === 404) setNotFound(true);
       });
   }
 
   useEffect(() => {
-    if (!initialized.current) {
-      initialized.current = true;
-      const stored = localStorage.getItem("auth-storage");
-      let parsedToken: string | null = null;
-      try { if (stored) parsedToken = JSON.parse(stored)?.state?.token ?? null; } catch { /* ignore */ }
-      const authToken = useAuth.getState().token ?? parsedToken;
+    if (booted.current) return;
+    booted.current = true;
 
-      if (!authToken) { router.push("/"); return; }
+    const raw = typeof window !== "undefined" ? localStorage.getItem("auth-storage") : null;
+    let stored: string | null = null;
+    try { if (raw) stored = JSON.parse(raw)?.state?.token ?? null; } catch { /* ignore */ }
+    const token = useAuth.getState().token ?? stored;
+    if (!token) { router.push("/"); return; }
 
-      setAuthToken(authToken);
-      api.get(`/projects/${projectId}`)
-        .then(r => setProject(r.data))
-        .catch((err: any) => {
-          if (err?.response?.status === 401) { logout(); router.push("/"); }
-        });
-    }
+    setAuthToken(token);
+    reload().finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
 
+  useEffect(() => {
     const socket = getSocket();
-    const join = () => joinProject(projectId, user?.id || "anonymous");
+    const join = () => joinProject(projectId, user?.id);
     if (socket.connected) join(); else socket.on("connect", join);
 
-    const handleTicketUpdate = (payload: { type: string; ticket: Ticket }) => {
-      setProject(prev => {
+    const onTicket = (payload: { type: string; ticket?: Ticket }) => {
+      setProject((prev) => {
         if (!prev) return prev;
-        if (payload.type === "created") return { ...prev, tickets: [payload.ticket, ...(prev.tickets ?? [])] };
-        if (payload.type === "updated") return { ...prev, tickets: (prev.tickets ?? []).map(t => t.id === payload.ticket.id ? payload.ticket : t) };
-        if (payload.type === "deleted") return { ...prev, tickets: (prev.tickets ?? []).filter(t => t.id !== payload.ticket.id) };
-        return prev;
+        const list = prev.tickets ?? [];
+        const t = payload.ticket;
+        switch (payload.type) {
+          case "created":
+            return t && !list.some((x) => x.id === t.id) ? { ...prev, tickets: [t, ...list] } : prev;
+          case "updated":
+            return t ? { ...prev, tickets: list.map((x) => (x.id === t.id ? t : x)) } : prev;
+          case "deleted":
+            return t ? { ...prev, tickets: list.filter((x) => x.id !== t.id) } : prev;
+          default:
+            return prev;
+        }
       });
     };
 
-    socket.on("ticket:updated", handleTicketUpdate);
+    socket.on("ticket:updated", onTicket);
+    return () => { socket.off("connect", join); socket.off("ticket:updated", onTicket); };
+  }, [projectId, user?.id]);
 
-    return () => {
-      socket.off("connect", join);
-      socket.off("ticket:updated", handleTicketUpdate);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, user?.email]);
+  /* ── Derived ──────────────────────────────────────────────── */
 
-  async function createTicket() {
-    if (!title.trim()) return;
-    try {
-      await api.post("/tickets", { projectId, title: title.trim(), description: description.trim(), priority, assigneeId: assigneeId || undefined, authorEmail: user?.email });
-      setTitle(""); setDescription(""); setPriority("MEDIUM"); setAssigneeId(""); setShowCreateModal(false);
-    } catch { /* ignore */ }
-  }
+  const role = useMemo(() => {
+    if (!project) return "VIEWER";
+    if (project.owner?.id === user?.id) return "OWNER";
+    return project.members?.find((m) => m.userId === user?.id)?.role ?? "VIEWER";
+  }, [project, user?.id]);
 
-  async function updateTicket() {
-    if (!editingTicket || !title.trim()) return;
-    try {
-      await api.patch(`/tickets/${editingTicket.id}`, { title: title.trim(), description: description.trim(), priority, assigneeId: assigneeId || null });
-      setEditingTicket(null); setTitle(""); setDescription(""); setPriority("MEDIUM"); setAssigneeId("");
-    } catch { /* ignore */ }
-  }
-
-  async function deleteTicket(ticketId: string) {
-    try { await api.delete(`/tickets/${ticketId}`); setProject(prev => prev ? { ...prev, tickets: (prev.tickets ?? []).filter(t => t.id !== ticketId) } : prev); setShowDeleteModal(null); }
-    catch { /* ignore */ }
-  }
-
-  function openEditModal(ticket: Ticket) {
-    setEditingTicket(ticket); setTitle(ticket.title); setDescription(ticket.description || ""); setPriority(ticket.priority || "MEDIUM"); setAssigneeId(ticket.assigneeId || "");
-  }
-
-  async function moveTicket(ticketId: string, newStatus: "TODO" | "IN_PROGRESS" | "DONE") {
-    if (!project) return;
-    const ticket = project.tickets?.find(t => t.id === ticketId);
-    if (!ticket || ticket.status === newStatus) return;
-    setProject(prev => prev ? { ...prev, tickets: (prev.tickets ?? []).map(t => t.id === ticketId ? { ...t, status: newStatus } : t) } : prev);
-    try { await api.patch(`/tickets/${ticketId}`, { status: newStatus }); }
-    catch { reloadProject(); }
-  }
-
-  async function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    setActiveId(null);
-    if (!over || !project) return;
-    
-    let newStatus = over.id as string;
-    if (!["TODO", "IN_PROGRESS", "DONE"].includes(newStatus)) {
-      const overTicket = project.tickets?.find(t => t.id === newStatus);
-      if (!overTicket) return;
-      newStatus = overTicket.status;
-    }
-    
-    moveTicket(active.id as string, newStatus as "TODO" | "IN_PROGRESS" | "DONE");
-  }
-
-  const filter = (tickets: Ticket[], status: string) => tickets.filter(t => {
-    const s = t.status === status;
-    const q = !searchQuery || t.title.toLowerCase().includes(searchQuery.toLowerCase()) || (t.description?.toLowerCase().includes(searchQuery.toLowerCase()));
-    const p = filterPriority === "ALL" || t.priority === filterPriority || (!t.priority && filterPriority === "MEDIUM");
-    return s && q && p;
-  });
+  const canEdit = role === "OWNER" || role === "EDITOR";
 
   const stats = useMemo(() => {
     const all = project?.tickets ?? [];
-    const total = all.length;
-    const done = all.filter(t => t.status === "DONE").length;
-    const inProg = all.filter(t => t.status === "IN_PROGRESS").length;
-    const urgent = all.filter(t => t.priority === "URGENT" || t.priority === "HIGH").length;
-    const progress = total > 0 ? Math.round((done / total) * 100) : 0;
-    return { total, done, inProg, urgent, progress };
+    const done = all.filter((t) => t.status === "DONE").length;
+    return {
+      total: all.length,
+      done,
+      active: all.filter((t) => t.status === "IN_PROGRESS").length,
+      urgent: all.filter((t) => t.priority === "URGENT").length,
+      pct: all.length ? Math.round((done / all.length) * 100) : 0,
+    };
   }, [project]);
 
-  if (!project) {
+  const byStatus = (s: Status) => {
+    const q = query.trim().toLowerCase();
+    return (project?.tickets ?? []).filter((t) => {
+      if (t.status !== s) return false;
+      if (priorityFilter !== "ALL" && (t.priority ?? "MEDIUM") !== priorityFilter) return false;
+      if (!q) return true;
+      return t.title.toLowerCase().includes(q) || (t.description ?? "").toLowerCase().includes(q);
+    });
+  };
+
+  const dragging = (project?.tickets ?? []).find((t) => t.id === activeId) ?? null;
+
+  /* ── Mutations ────────────────────────────────────────────── */
+
+  function openCreate() {
+    setEditing(null); setTitle(""); setDescription("");
+    setPriority("MEDIUM"); setAssigneeId(""); setCreating(true);
+  }
+
+  function openEdit(t: Ticket) {
+    setCreating(false); setEditing(t); setTitle(t.title);
+    setDescription(t.description ?? ""); setPriority(t.priority ?? "MEDIUM");
+    setAssigneeId(t.assigneeId ?? "");
+  }
+
+  function closeForm() { setCreating(false); setEditing(null); }
+
+  async function saveTask() {
+    if (!title.trim()) return;
+    setBusy(true);
+    try {
+      if (editing) {
+        await api.patch(`/tickets/${editing.id}`, {
+          title: title.trim(),
+          description: description.trim(),
+          priority,
+          assigneeId: assigneeId || null,
+        });
+      } else {
+        await api.post("/tickets", {
+          projectId,
+          title: title.trim(),
+          description: description.trim(),
+          priority,
+          assigneeId: assigneeId || undefined,
+        });
+      }
+      closeForm();
+      await reload();
+    } catch { /* ignore */ }
+    finally { setBusy(false); }
+  }
+
+  async function removeTask(id: string) {
+    setBusy(true);
+    try {
+      await api.delete(`/tickets/${id}`);
+      setProject((p) => (p ? { ...p, tickets: (p.tickets ?? []).filter((t) => t.id !== id) } : p));
+      setDeleting(null);
+    } catch { /* ignore */ }
+    finally { setBusy(false); }
+  }
+
+  async function move(id: string, status: Status) {
+    const current = (project?.tickets ?? []).find((t) => t.id === id);
+    if (!current || current.status === status) return;
+
+    // Optimistic — the socket echo confirms, and a failure reloads the truth.
+    setProject((p) => (p ? { ...p, tickets: (p.tickets ?? []).map((t) => (t.id === id ? { ...t, status } : t)) } : p));
+    try { await api.patch(`/tickets/${id}`, { status }); }
+    catch { reload(); }
+  }
+
+  function onDragEnd(e: DragEndEvent) {
+    setActiveId(null);
+    const { active, over } = e;
+    if (!over) return;
+
+    let target = String(over.id);
+    if (!STATUSES.includes(target as Status)) {
+      const overTicket = (project?.tickets ?? []).find((t) => t.id === target);
+      if (!overTicket) return;
+      target = overTicket.status;
+    }
+    move(String(active.id), target as Status);
+  }
+
+  /* ── Render ───────────────────────────────────────────────── */
+
+  if (loading) return <BoardSkeleton />;
+
+  if (notFound) {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#111" }}>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
-          <div style={{ width: 40, height: 40, border: "3px solid rgba(249,115,22,0.2)", borderTopColor: "#f97316", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-          <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 14 }}>Loading board…</span>
+      <div style={{ minHeight: "60vh", display: "grid", placeItems: "center", padding: 32 }}>
+        <div style={{ textAlign: "center", maxWidth: 380 }}>
+          <h1 className="display" style={{ fontSize: 30, marginBottom: 10 }}>Board unavailable</h1>
+          <p style={{ color: "var(--ink-secondary)", marginBottom: 22, lineHeight: 1.65 }}>
+            This board either doesn&apos;t exist or you no longer have access to it.
+          </p>
+          <button className="btn btn-accent" onClick={() => router.push("/projects")}>
+            <ArrowLeft size={15} /> Back to boards
+          </button>
         </div>
       </div>
     );
   }
 
-  const activeTicket = project.tickets?.find(t => t.id === activeId);
-  const userRole = (project.owner?.id === user?.id) ? "OWNER" : (project.members?.find(m => m.userId === user?.id)?.role || "VIEWER");
-  const canEdit = userRole === "OWNER" || userRole === "EDITOR";
+  if (!project) return null;
+
+  const members = project.members ?? [];
 
   return (
-    <div style={{ minHeight: "100vh", background: "#111111", color: "#fff", fontFamily: "Inter, -apple-system, sans-serif" }}>
+    <div style={{ minHeight: "100vh" }}>
       <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes slideIn { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: translateX(0); } }
-        .board-input {
-          width: 100%; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);
-          border-radius: 12px; padding: 12px 14px; color: #fff; font-size: 14px;
-          outline: none; transition: all 0.2s; font-family: inherit;
+        /* ── Column ─────────────────────────────────── */
+        /* All three columns are the SAME fixed height regardless of how many
+           tasks they hold. When a column fills past that height, its body
+           scrolls internally instead of the column growing taller. */
+        .col {
+          display: flex; flex-direction: column;
+          background: var(--surface-sunken);
+          border: 1px solid var(--line);
+          border-radius: var(--r-lg);
+          padding: 14px;
+          height: calc(100vh - 258px);
+          min-height: 380px;
+          transition: background var(--t-base) linear, border-color var(--t-base) linear;
         }
-        .board-input:focus { border-color: rgba(249,115,22,0.5); box-shadow: 0 0 0 3px rgba(249,115,22,0.1); }
-        .board-input::placeholder { color: rgba(255,255,255,0.3); }
-        .btn-orange-sm {
-          background: linear-gradient(135deg,#f97316,#ea580c); border: none; color: #fff;
-          font-size: 13px; font-weight: 700; cursor: pointer; padding: 10px 18px; border-radius: 10px;
-          display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s; font-family: inherit;
-          box-shadow: 0 4px 12px rgba(249,115,22,0.3);
+        .col[data-over="true"] { background: var(--accent-tint); border-color: var(--accent); }
+        .col-head {
+          display: flex; align-items: center; justify-content: space-between;
+          padding-bottom: 9px; margin-bottom: 12px;
+          border-bottom: 2px solid; flex-shrink: 0;
         }
-        .btn-orange-sm:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(249,115,22,0.4); }
-        .btn-orange-sm:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
-        .modal-glass {
-          position: fixed; inset: 0; z-index: 9999;
-          background: rgba(0,0,0,0.75); backdrop-filter: blur(12px);
-          display: flex; align-items: center; justify-content: center; padding: 24px;
+        /* flex:1 + min-height:0 lets this region shrink inside the fixed column
+           so overflow-y can actually take effect. The footer (quick-add) stays
+           pinned below it. */
+        .col-body {
+          display: flex; flex-direction: column; gap: 9px;
+          overflow-y: auto; overflow-x: hidden;
+          flex: 1; min-height: 0;
+          margin-right: -6px; padding-right: 6px;
         }
-        .modal-panel {
-          background: rgba(18,18,18,0.98); border: 1px solid rgba(255,255,255,0.1);
-          border-radius: 24px; padding: 32px; width: 100%; max-width: 500px;
-          box-shadow: 0 32px 64px rgba(0,0,0,0.7); animation: slideIn 0.35s cubic-bezier(0.16,1,0.3,1);
-          position: relative;
+        .col > footer { flex-shrink: 0; }
+        /* On phones the board scrolls horizontally, so a viewport-tall column
+           would be awkward — cap it and let the page scroll instead. */
+        @media (max-width: 768px) {
+          .col { height: auto; max-height: 74vh; min-height: 300px; }
         }
-        .pri-btn {
-          flex: 1; padding: 8px 4px; border-radius: 8px; border: 1px solid transparent;
-          font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.15s; font-family: inherit;
-          display: flex; align-items: center; justify-content: center; gap: 4px;
+
+        /* ── Card ───────────────────────────────────── */
+        .tk {
+          position: relative; background: var(--surface); flex-shrink: 0;
+          border: 1px solid var(--line); border-radius: var(--r-md);
+          box-shadow: var(--shadow-xs);
+          transition: box-shadow var(--t-base) var(--ease-out-quart),
+                      border-color var(--t-base) linear,
+                      transform var(--t-base) var(--ease-out-quart);
         }
-        .filter-chip {
-          padding: 5px 12px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1);
-          background: transparent; color: rgba(255,255,255,0.45); font-size: 12px; font-weight: 700;
-          cursor: pointer; transition: all 0.15s; font-family: inherit;
+        .tk:hover { box-shadow: var(--shadow-md); border-color: var(--line-strong); }
+        .tk:hover .tk-act { opacity: 1; }
+        /* Grab affordance on the whole card, since the whole card drags. */
+        .tk[data-draggable="true"] { cursor: grab; touch-action: manipulation; }
+        .tk[data-dragging="true"] { cursor: grabbing; }
+        .tk:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        .tk-body { padding: 12px 12px 11px; }
+        .tk-act {
+          position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; z-index: 2;
+          opacity: 0; transition: opacity var(--t-fast) linear;
         }
-        .filter-chip.active { background: rgba(249,115,22,0.15); border-color: rgba(249,115,22,0.4); color: #f97316; }
+        .tk-btn {
+          display: grid; place-items: center; width: 23px; height: 23px;
+          background: var(--surface); border: 1px solid var(--line-strong);
+          border-radius: var(--r-xs); color: var(--ink-tertiary); cursor: pointer;
+          transition: color var(--t-fast) linear, border-color var(--t-fast) linear;
+        }
+        .tk-btn:hover { color: var(--ink); }
+        .tk-btn[data-danger]:hover { color: var(--danger); border-color: var(--danger); }
+        .tk-av {
+          width: 19px; height: 19px; border-radius: 50%; flex-shrink: 0;
+          display: grid; place-items: center; font-size: 8.5px; font-weight: 700; color: #fff;
+        }
+        .tk-av[data-tone="author"] { background: var(--accent-gradient); }
+        .tk-av[data-tone="assignee"] { background: linear-gradient(135deg,#10b981,#047857); }
+
+        .tk-move { display: none; gap: 7px; padding: 0 12px 11px; }
+        .tk-move button {
+          flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+          padding: 7px; font-size: 12px; font-weight: 600; cursor: pointer;
+          background: var(--surface-sunken); border: 1px solid var(--line);
+          border-radius: var(--r-xs); color: var(--ink-secondary);
+        }
+        .tk-move button[data-next] { background: var(--accent-tint); border-color: transparent; color: var(--accent-strong); }
+
+        /* ── Quick add ──────────────────────────────── */
+        .qa-open {
+          width: 100%; display: flex; align-items: center; gap: 7px;
+          padding: 9px 11px; font-size: 13px; font-weight: 550; cursor: pointer;
+          background: transparent; color: var(--ink-tertiary);
+          border: 1px dashed var(--line-strong); border-radius: var(--r-sm);
+          transition: background var(--t-fast) linear, color var(--t-fast) linear, border-color var(--t-fast) linear;
+        }
+        .qa-open:hover { background: var(--surface); color: var(--accent-strong); border-color: var(--accent); }
+
+        /* ── Header bits ────────────────────────────── */
+        .bh {
+          position: sticky; top: var(--navbar-height); z-index: 40;
+          background: rgba(251,250,248,0.88);
+          -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+          border-bottom: 1px solid var(--line);
+        }
+        .chip {
+          padding: 5px 12px; border-radius: var(--r-full); cursor: pointer;
+          font-size: 12px; font-weight: 600; background: transparent;
+          border: 1px solid var(--line-strong); color: var(--ink-tertiary);
+          transition: background var(--t-fast) linear, color var(--t-fast) linear, border-color var(--t-fast) linear;
+        }
+        .chip:hover { color: var(--ink); }
+        .chip[data-on="true"] { background: var(--accent-tint); border-color: var(--accent); color: var(--accent-strong); }
+
+        .mstack { display: flex; }
+        .mstack > span { margin-left: -7px; border: 2px solid var(--canvas); }
+        .mstack > span:first-child { margin-left: 0; }
       `}</style>
 
-      {/* ══════════ HEADER ══════════ */}
-      <div className="project-header-section" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)", position: "sticky", top: 0, zIndex: 100, backdropFilter: "blur(16px)" }}>
-        <div className="project-header-row">
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <button onClick={() => router.push("/projects")} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "7px", display: "flex", alignItems: "center", color: "rgba(255,255,255,0.7)", cursor: "pointer", transition: "all 0.2s" }}
-              onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.12)"}
-              onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.06)"}
-            ><ArrowLeft size={18} /></button>
-            <div>
-              <h1 style={{ fontSize: 20, fontWeight: 900, margin: 0, letterSpacing: "-0.02em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{project.name}</h1>
-              <p style={{ margin: "2px 0 0", color: "rgba(255,255,255,0.4)", fontSize: 12 }}>
-                {stats.total} tasks · {stats.progress}% complete
-              </p>
-            </div>
-          </div>
-
-          {/* Header right */}
-          <div className="project-header-right" style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginRight: 8 }}>
-              {project.members && (
-                <button onClick={() => setShowMembersPanel(true)} style={{
-                  background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: 20, padding: "6px 14px", display: "flex", alignItems: "center", gap: 8,
-                  color: "rgba(255,255,255,0.8)", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                }}>
-                  <div style={{ display: "flex", marginLeft: 4 }}>
-                    {project.members.slice(0, 3).map((m, i) => (
-                      <div key={m.userId} style={{
-                        width: 20, height: 20, borderRadius: "50%", background: "var(--accent-gradient)",
-                        border: "2px solid #111", marginLeft: -8, zIndex: 3 - i,
-                      }} />
-                    ))}
-                  </div>
-                  {project.members.length} members
-                </button>
-              )}
-              {userRole === "OWNER" && (
-                <button onClick={() => setShowShareModal(true)} style={{
-                  background: "var(--accent-primary-soft)", border: "1px solid var(--accent-primary)",
-                  borderRadius: 20, padding: "6px 14px", display: "flex", alignItems: "center", gap: 6,
-                  color: "var(--accent-primary)", fontSize: 13, fontWeight: 700, cursor: "pointer",
-                }}>
-                  Share
-                </button>
-              )}
-            </div>
-
-            {/* Search */}
-            <div className="search-input-wrapper" style={{ position: "relative" }}>
-              <Search size={14} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.3)", pointerEvents: "none" }} />
-              <input placeholder="Search tasks…" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: 10, padding: "8px 12px 8px 32px", color: "#fff", fontSize: 13, outline: "none", width: 220, fontFamily: "inherit" }} />
-            </div>
-            {canEdit && (
-              <button className="btn-orange-sm" style={{ flexShrink: 0 }} onClick={() => { setTitle(""); setDescription(""); setPriority("MEDIUM"); setAssigneeId(""); setEditingTicket(null); setShowCreateModal(true); }}>
-                <Plus size={15} /> Add Task
+      {/* ── Header ── */}
+      <div className="bh">
+        <div className="project-header-section">
+          <div className="project-header-row">
+            <div style={{ display: "flex", alignItems: "center", gap: 13, minWidth: 0 }}>
+              <button
+                onClick={() => router.push("/projects")}
+                className="btn-icon"
+                aria-label="Back to boards"
+                style={{ border: "1px solid var(--line)", flexShrink: 0 }}
+              >
+                <ArrowLeft size={17} />
               </button>
-            )}
+              <div style={{ minWidth: 0 }}>
+                <h1
+                  className="display"
+                  style={{ fontSize: "clamp(1.35rem,2.6vw,1.85rem)", lineHeight: 1.15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                >
+                  {project.name}
+                </h1>
+                <p className="num" style={{ fontSize: 12.5, color: "var(--ink-tertiary)", margin: "2px 0 0" }}>
+                  {stats.total} task{stats.total === 1 ? "" : "s"} · {stats.pct}% complete
+                  {role !== "OWNER" && <> · <span style={{ color: "var(--ink-secondary)" }}>{role}</span></>}
+                </p>
+              </div>
+            </div>
+
+            <div className="project-header-right">
+              <button
+                onClick={() => setMembersOpen(true)}
+                className="btn btn-secondary"
+                style={{ paddingLeft: 7, gap: 8 }}
+              >
+                <span className="mstack" aria-hidden>
+                  {members.slice(0, 3).map((m) => (
+                    <span
+                      key={m.userId}
+                      style={{
+                        width: 21, height: 21, borderRadius: "50%", display: "grid", placeItems: "center",
+                        background: "var(--accent-gradient)", color: "#fff", fontSize: 8.5, fontWeight: 700,
+                      }}
+                    >
+                      {initialsOf(m.user)}
+                    </span>
+                  ))}
+                </span>
+                {members.length} member{members.length === 1 ? "" : "s"}
+              </button>
+
+              {role === "OWNER" && (
+                <button onClick={() => setShareOpen(true)} className="btn btn-secondary">
+                  <Share2 size={14} /> Share
+                </button>
+              )}
+
+              <div className="search-input-wrapper">
+                <Search size={14} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: "var(--ink-faint)", pointerEvents: "none" }} />
+                <input
+                  className="input"
+                  placeholder="Search tasks…"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  aria-label="Search tasks"
+                  style={{ width: 208, paddingLeft: 34, fontSize: 13, padding: "8px 12px 8px 34px" }}
+                />
+              </div>
+
+              {canEdit && (
+                <button className="btn btn-accent" onClick={openCreate} style={{ flexShrink: 0 }}>
+                  <Plus size={15} /> Add task
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Progress line */}
+          <div style={{ maxWidth: 1420, margin: "14px auto 0", display: "flex", alignItems: "center", gap: 16 }}>
+            <span style={{ flex: 1, height: 3, background: "var(--surface-sunken)", borderRadius: 99, overflow: "hidden" }}>
+              <span
+                style={{
+                  display: "block", height: "100%", width: `${stats.pct}%`, borderRadius: 99,
+                  background: stats.pct === 100 ? "var(--success)" : "var(--accent)",
+                  transition: "width var(--t-slower) var(--ease-out-expo)",
+                }}
+              />
+            </span>
+            <span className="num" style={{ display: "flex", gap: 15, fontSize: 12, color: "var(--ink-tertiary)", whiteSpace: "nowrap" }}>
+              <span>{byStatus("TODO").length} to do</span>
+              <span>{stats.active} active</span>
+              <span>{stats.done} done</span>
+              {stats.urgent > 0 && <span style={{ color: "var(--danger)", fontWeight: 600 }}>{stats.urgent} urgent</span>}
+            </span>
           </div>
         </div>
 
-        {/* Mini stats */}
-        <div style={{ maxWidth: 1440, margin: "12px auto 0", display: "flex", gap: 16, alignItems: "center" }}>
-          <div style={{ flex: 1, height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 4, overflow: "hidden" }}>
-            <div style={{ height: "100%", width: `${stats.progress}%`, background: "linear-gradient(90deg,#f97316,#10b981)", borderRadius: 4, transition: "width 0.8s cubic-bezier(0.16,1,0.3,1)" }} />
-          </div>
-          <div style={{ display: "flex", gap: 20, fontSize: 12, color: "rgba(255,255,255,0.4)", fontWeight: 600, whiteSpace: "nowrap" }}>
-            <span><span style={{ color: "#94a3b8" }}>●</span> {(project.tickets ?? []).filter(t => t.status === "TODO").length} todo</span>
-            <span><span style={{ color: "#f97316" }}>●</span> {stats.inProg} active</span>
-            <span><span style={{ color: "#10b981" }}>●</span> {stats.done} done</span>
-            {stats.urgent > 0 && <span style={{ color: "#ef4444" }}><span>⚡ </span>{stats.urgent} urgent</span>}
-          </div>
+        {/* Priority filter */}
+        <div className="project-filter-bar">
+          <span className="eyebrow" style={{ fontSize: 10, marginRight: 4 }}>Priority</span>
+          {(["ALL", "URGENT", "HIGH", "MEDIUM", "LOW"] as const).map((p) => (
+            <button
+              key={p}
+              className="chip"
+              data-on={priorityFilter === p}
+              onClick={() => setPriorityFilter(p)}
+              aria-pressed={priorityFilter === p}
+            >
+              {p === "ALL" ? "All" : PRIORITY[p].label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* ══════════ FILTER BAR ══════════ */}
-      <div className="project-filter-bar">
-        <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.3)", marginRight: 4 }}>Priority:</span>
-        {(["ALL", "URGENT", "HIGH", "MEDIUM", "LOW"] as const).map(p => (
-          <button key={p} className={`filter-chip${filterPriority === p ? " active" : ""}`}
-            onClick={() => setFilterPriority(p)}
-            style={p !== "ALL" ? { ...(filterPriority === p ? {} : { color: PRIORITY_META[p as Priority]?.color + "90" }) } : {}}>
-            {p === "ALL" ? "All" : PRIORITY_META[p as Priority].label}
-          </button>
-        ))}
-      </div>
-
-      {/* ══════════ KANBAN BOARD ══════════ */}
+      {/* ── Board ── */}
       <div className="kanban-page-wrapper">
-        <DndContext sensors={sensors} onDragStart={(e: DragStartEvent) => setActiveId(e.active.id as string)} onDragEnd={handleDragEnd}>
+        <DndContext
+          sensors={sensors}
+          onDragStart={(e: DragStartEvent) => setActiveId(String(e.active.id))}
+          onDragEnd={onDragEnd}
+          onDragCancel={() => setActiveId(null)}
+        >
           <div className="kanban-board">
-            {(["TODO", "IN_PROGRESS", "DONE"] as const).map(status => (
-              <KanbanColumn key={status} id={status} tickets={filter(project.tickets ?? [], status)}
-                onEdit={canEdit ? openEditModal : () => {}} onDelete={t => { if(canEdit) setShowDeleteModal(t); }} onMove={(t, s) => { if(canEdit) moveTicket(t, s); }}
-                projectId={projectId} userEmail={user?.email || ""} onAdded={reloadProject} canEdit={canEdit} />
+            {STATUSES.map((s) => (
+              <Column
+                key={s}
+                status={s}
+                tickets={byStatus(s)}
+                canEdit={canEdit}
+                projectId={projectId}
+                onAdded={reload}
+                onEdit={openEdit}
+                onDelete={setDeleting}
+                onMove={move}
+              />
             ))}
           </div>
 
-          <DragOverlay>
-            {activeId && activeTicket ? (
-              <div style={{
-                padding: 14, background: "rgba(20,20,20,0.95)",
-                border: "1px solid rgba(249,115,22,0.4)", borderRadius: 14,
-                boxShadow: "0 20px 48px rgba(0,0,0,0.6), 0 0 24px rgba(249,115,22,0.15)",
-                transform: "rotate(1.5deg)",
-              }}>
-                <h4 style={{ fontSize: 13, fontWeight: 700, margin: 0, color: "#fff" }}>{activeTicket.title}</h4>
+          <DragOverlay dropAnimation={{ duration: 220, easing: "cubic-bezier(0.16,1,0.3,1)" }}>
+            {dragging && (
+              <div
+                style={{
+                  background: "var(--surface)", border: "1px solid var(--accent)",
+                  borderRadius: "var(--r-md)", padding: "12px 13px",
+                  boxShadow: "var(--shadow-xl)", transform: "rotate(-1.4deg)", cursor: "grabbing",
+                }}
+              >
+                <span className="badge" style={{ ...{ color: PRIORITY[dragging.priority ?? "MEDIUM"].fg, background: PRIORITY[dragging.priority ?? "MEDIUM"].bg }, fontSize: 10.5, marginBottom: 6 }}>
+                  {PRIORITY[dragging.priority ?? "MEDIUM"].label}
+                </span>
+                <h4 style={{ fontSize: 13.5, fontWeight: 580, margin: 0, color: "var(--ink)" }}>{dragging.title}</h4>
               </div>
-            ) : null}
+            )}
           </DragOverlay>
         </DndContext>
 
-        {/* Notifications */}
-        <div style={{ marginTop: 40, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 24 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-            <Activity size={16} color="#f97316" />
-            <span style={{ fontSize: 14, fontWeight: 800, color: "#fff" }}>Recent Activity</span>
+        {/* ── Activity ── */}
+        <section style={{ marginTop: 40, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: "var(--r-lg)", padding: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
+            <Activity size={15} style={{ color: "var(--accent-strong)" }} />
+            <h2 style={{ fontSize: 14, fontWeight: 650, letterSpacing: "-0.01em" }}>Recent activity</h2>
           </div>
           <Notifications projectId={projectId} />
-        </div>
+        </section>
       </div>
 
-      {/* ══════════ CREATE / EDIT MODAL ══════════ */}
-      {(showCreateModal || editingTicket) && (
-        <div className="modal-glass" onClick={() => { setShowCreateModal(false); setEditingTicket(null); }}>
-          <div className="modal-panel" onClick={e => e.stopPropagation()}>
-            <button onClick={() => { setShowCreateModal(false); setEditingTicket(null); }} style={{ position: "absolute", top: 20, right: 20, background: "rgba(255,255,255,0.06)", border: "none", borderRadius: "50%", width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.6)", cursor: "pointer" }}><X size={15} /></button>
+      {/* ── Task form ── */}
+      {(creating || editing) && (
+        <Sheet
+          title={editing ? "Edit task" : "New task"}
+          icon={editing ? <Edit2 size={15} /> : <Plus size={16} />}
+          onClose={closeForm}
+        >
+          <Row label="Title">
+            <input
+              className="input" autoFocus value={title}
+              placeholder="What needs to happen?"
+              onChange={(e) => setTitle(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) saveTask(); }}
+            />
+          </Row>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: editingTicket ? "rgba(99,102,241,0.15)" : "rgba(249,115,22,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                {editingTicket ? <Edit2 size={18} color="#818cf8" /> : <Plus size={18} color="#f97316" />}
-              </div>
-              <h2 style={{ fontSize: 20, fontWeight: 800, margin: 0, letterSpacing: "-0.02em" }}>
-                {editingTicket ? "Edit Task" : "New Task"}
-              </h2>
+          <Row label="Description" hint="Optional">
+            <textarea
+              className="input" rows={3} value={description}
+              placeholder="Add context…"
+              onChange={(e) => setDescription(e.target.value)}
+              style={{ resize: "vertical", minHeight: 76 }}
+            />
+          </Row>
+
+          <Row label="Priority">
+            <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+              {(["LOW", "MEDIUM", "HIGH", "URGENT"] as Priority[]).map((p) => {
+                const on = priority === p;
+                return (
+                  <button
+                    key={p}
+                    onClick={() => setPriority(p)}
+                    aria-pressed={on}
+                    style={{
+                      flex: 1, minWidth: 72, padding: "8px 6px", cursor: "pointer",
+                      fontSize: 12.5, fontWeight: 600, borderRadius: "var(--r-xs)",
+                      background: on ? PRIORITY[p].bg : "var(--surface)",
+                      color: on ? PRIORITY[p].fg : "var(--ink-tertiary)",
+                      border: `1px solid ${on ? PRIORITY[p].fg : "var(--line-strong)"}`,
+                      transition: "all var(--t-fast) linear",
+                    }}
+                  >
+                    {PRIORITY[p].label}
+                  </button>
+                );
+              })}
             </div>
-            <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 13, marginBottom: 24 }}>
-              {editingTicket ? "Update task details below." : "Add a new task to your board."}
-            </p>
+          </Row>
 
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.4)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.08em" }}>Title *</label>
-              <input className="board-input" placeholder="e.g. Implement auth flow" value={title} onChange={e => setTitle(e.target.value)} autoFocus onKeyDown={e => e.key === "Enter" && (editingTicket ? updateTicket() : createTicket())} />
+          <Row label="Assignee" hint="Optional">
+            <select
+              className="input"
+              value={assigneeId}
+              onChange={(e) => setAssigneeId(e.target.value)}
+              style={{ cursor: "pointer" }}
+            >
+              <option value="">Unassigned</option>
+              {members.map((m) => (
+                <option key={m.userId} value={m.userId}>
+                  {label(m.user) || m.userId}{m.userId === user?.id ? " (you)" : ""}
+                </option>
+              ))}
+            </select>
+          </Row>
+
+          {editing && (
+            <div style={{ borderTop: "1px solid var(--line)", marginTop: 20, paddingTop: 18 }}>
+              <CommentsSection ticketId={editing.id} projectId={projectId} />
             </div>
+          )}
 
-            <div style={{ marginBottom: 20 }}>
-              <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.4)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.08em" }}>Description</label>
-              <textarea className="board-input" placeholder="Add more context (optional)…" value={description} onChange={e => setDescription(e.target.value)} rows={3} style={{ resize: "vertical", minHeight: 80 }} />
-            </div>
+          <div style={{ display: "flex", gap: 9, justifyContent: "flex-end", marginTop: 22 }}>
+            <button className="btn btn-ghost" onClick={closeForm}>Cancel</button>
+            <button className="btn btn-accent" onClick={saveTask} disabled={busy || !title.trim()}>
+              {busy ? "Saving…" : editing ? "Save changes" : "Create task"}
+            </button>
+          </div>
+        </Sheet>
+      )}
 
-            <div style={{ marginBottom: 28 }}>
-              <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.4)", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.08em" }}>Priority</label>
-              <div style={{ display: "flex", gap: 8 }}>
-                {(["LOW", "MEDIUM", "HIGH", "URGENT"] as Priority[]).map(p => {
-                  const pm = PRIORITY_META[p];
-                  const active = priority === p;
-                  return (
-                    <button key={p} className="pri-btn" onClick={() => setPriority(p)}
-                      style={{ color: active ? pm.color : "rgba(255,255,255,0.4)", background: active ? pm.bg : "rgba(255,255,255,0.04)", borderColor: active ? pm.color + "50" : "rgba(255,255,255,0.08)" }}>
-                      <Flag size={11} />{pm.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+      {/* ── Delete ── */}
+      {deleting && (
+        <Sheet title="Delete this task?" icon={<AlertTriangle size={15} />} tone="danger" onClose={() => setDeleting(null)} compact>
+          <p style={{ color: "var(--ink-secondary)", fontSize: 14, lineHeight: 1.65 }}>
+            <strong style={{ color: "var(--ink)" }}>{deleting.title}</strong> and its comments
+            will be permanently removed.
+          </p>
+          <div style={{ display: "flex", gap: 9, justifyContent: "flex-end", marginTop: 22 }}>
+            <button className="btn btn-ghost" onClick={() => setDeleting(null)}>Cancel</button>
+            <button className="btn btn-danger" onClick={() => removeTask(deleting.id)} disabled={busy}>
+              {busy ? "Deleting…" : "Delete task"}
+            </button>
+          </div>
+        </Sheet>
+      )}
 
-            {/* Assignee */}
-            <div style={{ marginBottom: 28 }}>
-              <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.4)", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.08em" }}>Assignee</label>
-              <select
-                className="board-input"
-                value={assigneeId}
-                onChange={e => setAssigneeId(e.target.value)}
-                style={{ cursor: "pointer", appearance: "none" }}
-              >
-                <option value="" style={{ background: "#1a1a1a" }}>Unassigned</option>
-                {(project.members ?? []).map(m => {
-                  const u = m.user || {};
-                  const label = u.name || u.username || u.email || m.userId;
-                  return (
-                    <option key={m.userId} value={m.userId} style={{ background: "#1a1a1a" }}>
-                      {label}{m.userId === user?.id ? " (you)" : ""}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
+      {shareOpen && <ShareModal projectId={projectId} projectName={project.name} onClose={() => setShareOpen(false)} />}
+      {membersOpen && <MembersPanel projectId={projectId} onClose={() => setMembersOpen(false)} />}
+    </div>
+  );
+}
 
-            {/* Comments rendered inside the task modal when editing */}
-            {editingTicket && (
-              <CommentsSection ticketId={editingTicket.id} projectId={projectId} />
-            )}
+/* ═══════════════════════════════════════════════════════════════
+   SHELL PIECES
+   ═══════════════════════════════════════════════════════════════ */
 
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-              <button onClick={() => { setShowCreateModal(false); setEditingTicket(null); }} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "10px 18px", color: "rgba(255,255,255,0.7)", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
-              <button className="btn-orange-sm" style={{ padding: "10px 20px", fontSize: 14 }} onClick={editingTicket ? updateTicket : createTicket} disabled={!title.trim()}>
-                {editingTicket ? "Save Changes" : <><Plus size={15} /> Create Task</>}
-              </button>
+function Sheet({
+  title, icon, tone = "default", compact, onClose, children,
+}: {
+  title: string; icon?: React.ReactNode; tone?: "default" | "danger";
+  compact?: boolean; onClose: () => void; children: React.ReactNode;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = ""; };
+  }, [onClose]);
+
+  return (
+    <div
+      onClick={onClose}
+      role="presentation"
+      style={{
+        position: "fixed", inset: 0, zIndex: 9999, display: "flex",
+        alignItems: "center", justifyContent: "center", padding: 22,
+        background: "var(--overlay)",
+        backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
+        animation: "fade-in var(--t-base) var(--ease-out-quart)",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        style={{
+          width: "100%", maxWidth: compact ? 412 : 512,
+          maxHeight: "88vh", overflowY: "auto",
+          background: "var(--surface)", border: "1px solid var(--line)",
+          borderRadius: "var(--r-xl)", boxShadow: "var(--shadow-xl)", padding: 26,
+          animation: "scale-in var(--t-slow) var(--ease-spring)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+          {icon && (
+            <span
+              style={{
+                width: 32, height: 32, borderRadius: "var(--r-xs)", display: "grid", placeItems: "center", flexShrink: 0,
+                background: tone === "danger" ? "var(--danger-tint)" : "var(--accent-tint)",
+                color: tone === "danger" ? "var(--danger)" : "var(--accent-strong)",
+              }}
+            >
+              {icon}
+            </span>
+          )}
+          <h2 style={{ fontSize: 17.5, fontWeight: 650, letterSpacing: "-0.02em" }}>{title}</h2>
+          <button onClick={onClose} className="btn-icon" aria-label="Close" style={{ marginLeft: "auto", width: 30, height: 30 }}>
+            <X size={15} />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 7 }}>
+        <span className="eyebrow" style={{ fontSize: 10.5 }}>{label}</span>
+        {hint && <span style={{ fontSize: 11, color: "var(--ink-faint)" }}>{hint}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function BoardSkeleton() {
+  return (
+    <div>
+      <div className="project-header-section" style={{ borderBottom: "1px solid var(--line)" }}>
+        <div className="project-header-row">
+          <div style={{ display: "flex", alignItems: "center", gap: 13 }}>
+            <span className="skeleton" style={{ width: 36, height: 36, borderRadius: "var(--r-sm)" }} />
+            <div>
+              <span className="skeleton" style={{ display: "block", width: 200, height: 24, marginBottom: 7 }} />
+              <span className="skeleton skeleton-text" style={{ display: "block", width: 130 }} />
             </div>
           </div>
         </div>
-      )}
-
-      {/* ══════════ DELETE MODAL ══════════ */}
-      {showDeleteModal && (
-        <div className="modal-glass" onClick={() => setShowDeleteModal(null)}>
-          <div className="modal-panel" onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: "rgba(239,68,68,0.12)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <AlertCircle size={22} color="#ef4444" />
+      </div>
+      <div className="kanban-page-wrapper">
+        <div className="kanban-board">
+          {[0, 1, 2].map((c) => (
+            <div key={c} style={{ background: "var(--surface-sunken)", border: "1px solid var(--line)", borderRadius: "var(--r-lg)", padding: 14 }}>
+              <span className="skeleton skeleton-text" style={{ display: "block", width: 88, marginBottom: 16 }} />
+              <div style={{ display: "grid", gap: 9 }}>
+                {Array.from({ length: 3 - c === 0 ? 2 : 3 - c }).map((_, i) => (
+                  <div key={i} style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: "var(--r-md)", padding: 12 }}>
+                    <span className="skeleton" style={{ display: "block", width: 52, height: 17, borderRadius: 99, marginBottom: 10 }} />
+                    <span className="skeleton skeleton-text" style={{ display: "block", width: "88%", marginBottom: 7 }} />
+                    <span className="skeleton skeleton-text" style={{ display: "block", width: "62%" }} />
+                  </div>
+                ))}
               </div>
-              <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Delete Task?</h2>
             </div>
-            <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>
-              You're about to delete <strong style={{ color: "#fff" }}>"{showDeleteModal.title}"</strong>. This action cannot be undone.
-            </p>
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-              <button onClick={() => setShowDeleteModal(null)} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "10px 18px", color: "rgba(255,255,255,0.7)", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
-              <button onClick={() => deleteTicket(showDeleteModal.id)} style={{ background: "#ef4444", border: "none", color: "#fff", fontSize: 14, fontWeight: 700, padding: "10px 18px", borderRadius: 12, cursor: "pointer", fontFamily: "inherit" }}>Delete Task</button>
-            </div>
-          </div>
+          ))}
         </div>
-      )}
-
-      {/* Modals */}
-      {showShareModal && <ShareModal projectId={projectId} projectName={project.name} onClose={() => setShowShareModal(false)} />}
-      {showMembersPanel && <MembersPanel projectId={projectId} onClose={() => setShowMembersPanel(false)} />}
+      </div>
     </div>
   );
 }

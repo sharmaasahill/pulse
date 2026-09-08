@@ -9,21 +9,31 @@ export class ProjectsService {
     private readonly gateway: AppGateway,
   ) {}
 
-  // List all projects where the user is a member (owned + shared)
+  /**
+   * List every project the user belongs to (owned + shared).
+   *
+   * This drives the dashboard and the sidebar, so it is deliberately a NARROW
+   * projection. It previously used `include: { tickets: true, members: { include:
+   * { user: true } } }`, which shipped every ticket's title, description and
+   * timestamps plus a full user record per membership — many times more data
+   * than either screen reads. The dashboard only needs each ticket's status and
+   * priority to compute counts, and each member's id and role for the badges.
+   */
   list(userId: string) {
     return this.prisma.project.findMany({
       where: {
         members: { some: { userId } },
       },
       orderBy: { updatedAt: 'desc' },
-      include: {
-        tickets: true,
-        members: {
-          include: {
-            user: { select: { id: true, email: true, username: true, name: true } },
-          },
-        },
-        owner: { select: { id: true, email: true, username: true, name: true } },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        ownerId: true,
+        createdAt: true,
+        updatedAt: true,
+        tickets: { select: { id: true, status: true, priority: true } },
+        members: { select: { userId: true, role: true } },
       },
     });
   }

@@ -61,9 +61,11 @@ export function MembersPanel({ projectId, onClose }: { projectId: string; onClos
 
   const roleBadge = (role: string) => {
     const colors: Record<string, { bg: string; color: string }> = {
-      OWNER: { bg: "rgba(245,158,11,0.15)", color: "#f59e0b" },
-      EDITOR: { bg: "var(--success-soft)", color: "var(--success)" },
-      VIEWER: { bg: "rgba(255,255,255,0.06)", color: "var(--text-tertiary)" },
+      // Light-theme safe: a white-ish tint would vanish on the light surface,
+      // and #f59e0b amber fails contrast on white — use the darker warning ink.
+      OWNER: { bg: "var(--warning-tint)", color: "var(--warning)" },
+      EDITOR: { bg: "var(--success-tint)", color: "var(--success)" },
+      VIEWER: { bg: "var(--surface-sunken)", color: "var(--ink-tertiary)" },
     };
     const c = colors[role] || colors.VIEWER;
     return (
