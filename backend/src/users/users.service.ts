@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import * as bcrypt from 'bcrypt';
 
 // The columns we are safe to send back to the client.
@@ -21,7 +22,10 @@ const SAFE_USER_SELECT = {
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async findOrCreateByEmail(email: string) {
     return this.prisma.user.upsert({
@@ -55,6 +59,13 @@ export class UsersService {
     userId: string,
     input: { name?: string; username?: string; email?: string },
   ) {
+    // Load the current values so we can report exactly what changed.
+    const current = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true, username: true, email: true },
+    });
+    if (!current) throw new NotFoundException('User not found');
+
     if (input.username) {
       const existing = await this.prisma.user.findUnique({
         where: { username: input.username },
@@ -73,7 +84,7 @@ export class UsersService {
       }
     }
 
-    return this.prisma.user.update({
+    const updated = await this.prisma.user.update({
       where: { id: userId },
       data: {
         name: input.name,
@@ -82,6 +93,24 @@ export class UsersService {
       },
       select: SAFE_USER_SELECT,
     });
+
+    // Figure out which fields actually changed, so the notification is specific.
+    const changed: string[] = [];
+    if (input.name !== undefined && input.name !== current.name) changed.push('name');
+    if (input.username !== undefined && input.username !== current.username) changed.push('username');
+    if (input.email !== undefined && input.email !== current.email) changed.push('email');
+
+    if (changed.length > 0) {
+      await this.notifications.create({
+        userId,
+        type: 'account_updated',
+        title: 'Profile updated',
+        message: `You updated your ${changed.join(', ')}.`,
+        link: '/profile',
+      });
+    }
+
+    return updated;
   }
 
   /**
@@ -108,6 +137,15 @@ export class UsersService {
     await this.prisma.user.update({
       where: { id: userId },
       data: { passwordHash },
+    });
+
+    // Notify the user of the security-relevant change.
+    await this.notifications.create({
+      userId,
+      type: 'password_changed',
+      title: 'Password changed',
+      message: 'Your account password was changed.',
+      link: '/profile',
     });
 
     return { success: true };
