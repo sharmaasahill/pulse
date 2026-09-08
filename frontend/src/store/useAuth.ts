@@ -15,6 +15,7 @@ type AuthState = {
   user?: UserData;
   login: (data: any) => Promise<void>;
   register: (data: any) => Promise<void>;
+  updateUser: (partial: Partial<UserData>) => void;
   logout: () => void;
 };
 
@@ -32,6 +33,13 @@ export const useAuth = create<AuthState>()(
         const response = await api.post('/auth/register', data);
         setAuthToken(response.data.token);
         set({ token: response.data.token, user: response.data.user });
+      },
+      // Merge updated fields (e.g. after editing the profile) into the stored
+      // user so the Navbar and everywhere else reflects changes immediately.
+      updateUser(partial) {
+        set((state) => ({
+          user: state.user ? { ...state.user, ...partial } : state.user,
+        }));
       },
       logout() {
         setAuthToken(undefined);

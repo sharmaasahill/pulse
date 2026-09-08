@@ -266,10 +266,22 @@ function IconBox({ icon, color }: { icon: React.ReactNode; color: string }) {
    MAIN COMPONENT
 ══════════════════════════════════════════════════════════ */
 export default function LandingPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const router = useRouter();
   const [showLogin, setShowLogin] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  // The auth token is restored from localStorage on the client only. Gating the
+  // logged-in UI behind `mounted` keeps the first client render identical to the
+  // server render (logged-out), then switches once hydration is done — this
+  // avoids React hydration mismatches while still reflecting the real state.
+  useEffect(() => { setMounted(true); }, []);
+  const loggedIn = mounted && !!token;
+
+  const initials = user?.name
+    ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+    : user?.username?.slice(0, 2).toUpperCase() || '?';
 
   const sectionIntegrations = useInView();
   const sectionFeatures = useInView();
@@ -316,16 +328,48 @@ export default function LandingPage() {
 
           {/* Right: Actions */}
           <div className="lp-nav-actions">
-            <button className="lp-login-btn" onClick={go} style={{
-              background: 'none', border: 'none', color: 'rgba(255,255,255,0.55)',
-              fontSize: '14px', fontWeight: '500', cursor: 'pointer', padding: '8px 16px',
-              fontFamily: 'inherit',
-            }}>Log in</button>
-            <button className="lp-btn-orange" onClick={go} style={{
-              fontSize: '13px', padding: '8px 18px', borderRadius: '10px',
-            }}>
-              Get Started
-            </button>
+            {loggedIn ? (
+              <>
+                {/* Logged-in: account badge + dashboard link */}
+                <button
+                  className="lp-login-btn"
+                  onClick={() => router.push('/profile')}
+                  title="Profile & settings"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
+                    color: '#fff', borderRadius: '100px', padding: '4px 14px 4px 4px',
+                    cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >
+                  <span style={{
+                    width: '26px', height: '26px', borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #f97316, #fb923c)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '11px', fontWeight: '800', color: '#fff',
+                  }}>{initials}</span>
+                  <span style={{ fontSize: '13px', fontWeight: '600' }}>{user?.username || 'Account'}</span>
+                </button>
+                <button className="lp-btn-orange" onClick={() => router.push('/projects')} style={{
+                  fontSize: '13px', padding: '8px 18px', borderRadius: '10px',
+                }}>
+                  Open Dashboard
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="lp-login-btn" onClick={go} style={{
+                  background: 'none', border: 'none', color: 'rgba(255,255,255,0.55)',
+                  fontSize: '14px', fontWeight: '500', cursor: 'pointer', padding: '8px 16px',
+                  fontFamily: 'inherit',
+                }}>Log in</button>
+                <button className="lp-btn-orange" onClick={go} style={{
+                  fontSize: '13px', padding: '8px 18px', borderRadius: '10px',
+                }}>
+                  Get Started
+                </button>
+              </>
+            )}
             {/* Hamburger (Mobile/Tablet only) */}
             <button className="lp-hamburger" onClick={() => setMenuOpen(v => !v)}>
               {menuOpen ? <X size={24} /> : <Menu size={24} />}
@@ -350,14 +394,29 @@ export default function LandingPage() {
                 }}
               >{label}</a>
             ))}
-            <button className="lp-btn-orange" onClick={() => { setMenuOpen(false); go(); }}
-              style={{ marginTop: '16px', padding: '12px', justifyContent: 'center' }}>
-              Get Started Free
-            </button>
-            <button className="lp-btn-ghost" onClick={() => { setMenuOpen(false); go(); }}
-              style={{ marginTop: '8px', padding: '12px', justifyContent: 'center', border: 'none' }}>
-              Log in
-            </button>
+            {loggedIn ? (
+              <>
+                <button className="lp-btn-orange" onClick={() => { setMenuOpen(false); router.push('/projects'); }}
+                  style={{ marginTop: '16px', padding: '12px', justifyContent: 'center' }}>
+                  Open Dashboard
+                </button>
+                <button className="lp-btn-ghost" onClick={() => { setMenuOpen(false); router.push('/profile'); }}
+                  style={{ marginTop: '8px', padding: '12px', justifyContent: 'center', border: 'none' }}>
+                  {user?.username ? `Signed in as ${user.username}` : 'Profile'}
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="lp-btn-orange" onClick={() => { setMenuOpen(false); go(); }}
+                  style={{ marginTop: '16px', padding: '12px', justifyContent: 'center' }}>
+                  Get Started Free
+                </button>
+                <button className="lp-btn-ghost" onClick={() => { setMenuOpen(false); go(); }}
+                  style={{ marginTop: '8px', padding: '12px', justifyContent: 'center', border: 'none' }}>
+                  Log in
+                </button>
+              </>
+            )}
           </div>
         )}
       </header>

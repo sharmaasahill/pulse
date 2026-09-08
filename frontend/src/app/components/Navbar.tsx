@@ -75,16 +75,22 @@ export function Navbar() {
 
                 <NotificationBell />
 
-                {/* User badge */}
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  padding: '4px 12px 4px 4px',
-                  borderRadius: 'var(--radius-full)',
-                  background: 'var(--bg-hover)',
-                  border: '1px solid var(--border-primary)',
-                }}>
+                {/* User badge — links to profile settings */}
+                <Link
+                  href="/profile"
+                  title="Profile & settings"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '4px 12px 4px 4px',
+                    borderRadius: 'var(--radius-full)',
+                    background: 'var(--bg-hover)',
+                    border: `1px solid ${pathname === '/profile' ? 'var(--accent-primary)' : 'var(--border-primary)'}`,
+                    textDecoration: 'none',
+                    transition: 'border-color var(--transition-fast)',
+                  }}
+                >
                   <div style={{
                     width: '28px',
                     height: '28px',
@@ -107,7 +113,7 @@ export function Navbar() {
                   }}>
                     {user?.username || 'User'}
                   </span>
-                </div>
+                </Link>
 
                 <button
                   onClick={() => {
